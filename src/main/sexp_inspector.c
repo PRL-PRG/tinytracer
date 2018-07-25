@@ -35,7 +35,7 @@ void sexp_inspector_gc(SEXP sexp) {
         return;
     SEXPTYPE type = TYPEOF(sexp);
     char *hr_type = sexptype2char(type);
-    fprintf(sexp_inspector_log, "G;%p;%i\n", sexp, hr_type);
+    fprintf(sexp_inspector_log, "G;%p;%s\n", sexp, hr_type);
 }
 
 void sexp_inspector_close() {
