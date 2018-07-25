@@ -1,0 +1,12 @@
+#!/bin/bash
+
+export CPPFLAGS="-ggdb"
+export CFLAGS="-ggdb"
+export R_KEEP_PKG_SOURCE=yes
+
+./configure --with-blas --with-lapack --without-ICU --without-x \
+            --without-tcltk --without-aqua --without-recommended-packages \
+            --without-internal-tzcode --with-included-gettext --enable-dyntrace
+
+make clean && make -j8
+
