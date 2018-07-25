@@ -90,6 +90,7 @@
 #include <R_ext/Rallocators.h> /* for R_allocator_t structure */
 #include <Rmath.h> // R_pow_di
 #include <Print.h> // R_print
+#include <sexp_inspector.h>
 
 #if defined(Win32)
 extern void *Rm_malloc(size_t n);
@@ -2280,6 +2281,9 @@ SEXP allocSExp(SEXPTYPE t)
     CDR(s) = R_NilValue;
     TAG(s) = R_NilValue;
     ATTRIB(s) = R_NilValue;
+
+    sexp_inspector_allocation(s);
+
     return s;
 }
 
@@ -2297,6 +2301,9 @@ static SEXP allocSExpNonCons(SEXPTYPE t)
     SET_TYPEOF(s, t);
     TAG(s) = R_NilValue;
     ATTRIB(s) = R_NilValue;
+
+    sexp_inspector_allocation(s);
+
     return s;
 }
 
@@ -2330,6 +2337,9 @@ SEXP cons(SEXP car, SEXP cdr)
     CDR(s) = CHK(cdr); if (cdr) INCREMENT_REFCNT(cdr);
     TAG(s) = R_NilValue;
     ATTRIB(s) = R_NilValue;
+
+    sexp_inspector_allocation(s);
+
     return s;
 }
 
@@ -2362,6 +2372,9 @@ SEXP CONS_NR(SEXP car, SEXP cdr)
     CDR(s) = CHK(cdr);
     TAG(s) = R_NilValue;
     ATTRIB(s) = R_NilValue;
+
+    sexp_inspector_allocation(s);
+
     return s;
 }
 
@@ -2422,6 +2435,9 @@ SEXP NewEnvironment(SEXP namelist, SEXP valuelist, SEXP rho)
 	v = CDR(v);
 	n = CDR(n);
     }
+
+    sexp_inspector_allocation(newrho);
+
     return (newrho);
 }
 
@@ -2460,6 +2476,9 @@ SEXP attribute_hidden mkPROMISE(SEXP expr, SEXP rho)
     PRVALUE(s) = R_UnboundValue;
     PRSEEN(s) = 0;
     ATTRIB(s) = R_NilValue;
+
+    sexp_inspector_allocation(s);
+
     return s;
 }
 
@@ -2487,6 +2506,9 @@ static void *custom_node_alloc(R_allocator_t *allocator, size_t size) {
     if (ptr) {
 	R_allocator_t *ca = (R_allocator_t*) ptr;
 	*ca = *allocator;
+
+    // sexp_inspector_raw_allocation(ca + 1); FIXME
+
 	return (void*) (ca + 1);
     }
     return NULL;
@@ -2557,6 +2579,9 @@ SEXP allocVector3(SEXPTYPE type, R_xlen_t length, R_allocator_t *allocator)
 	    SET_STDVEC_TRUELENGTH(s, 0);
 	    SET_NAMED(s, 0);
 	    INIT_REFCNT(s);
+
+        sexp_inspector_allocation(s);
+
 	    return(s);
 	}
     }
@@ -2642,6 +2667,8 @@ SEXP allocVector3(SEXPTYPE type, R_xlen_t length, R_allocator_t *allocator)
 #endif
 	s = allocList((int) length);
 	SET_TYPEOF(s, LANGSXP);
+
+    sexp_inspector_allocation(s);
 	return s;
     case LISTSXP:
 #ifdef LONG_VECTOR_SUPPORT
@@ -2963,6 +2990,21 @@ static void gc_end_timing(void)
 
 static void R_gc_internal(R_size_t size_needed)
 {
+    // SEXP inspector loop is placed here because R_GenHeap is only accessible from memory.c
+    {
+        for (int gen = 0; gen < NUM_OLD_GENERATIONS; gen++)
+            for (int cls = 0; cls < NUM_NODE_CLASSES; cls++) {
+                if (R_GenHeap[cls].OldCount[gen] <= 0)
+                    break;
+                SEXP cursor_sexp = R_GenHeap[cls].Old[gen]->gengc_next_node;
+                while (cursor_sexp != R_GenHeap[cls].Old[gen]) {
+                    SEXP next_sexp = cursor_sexp->gengc_next_node;
+                    sexp_inspector_gc(next_sexp);
+                    cursor_sexp = next_sexp;
+                }
+            }
+    }
+
     if (!R_GCEnabled) {
       if (NO_FREE_NODES())
 	R_NSize = R_NodesInUse + 1;

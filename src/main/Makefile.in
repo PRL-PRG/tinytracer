@@ -36,7 +36,8 @@ SOURCES_C = \
 	times.c \
 	unique.c util.c \
 	version.c \
-	g_alab_her.c g_cntrlify.c g_fontdb.c g_her_glyph.c
+	g_alab_her.c g_cntrlify.c g_fontdb.c g_her_glyph.c \
+	sexp_inspector.c
 
 SOURCES_F =  xxxpr.f
 
@@ -62,7 +63,8 @@ HEADERS = \
 	unzip.h \
 	valid_utf8.h \
 	xspline.c \
-	g_cntrlify.h g_control.h g_extern.h g_her_metr.h g_jis.h
+	g_cntrlify.h g_control.h g_extern.h g_her_metr.h g_jis.h \
+	sexp_inspector.h
 
 
 distdir = $(top_builddir)/$(PACKAGE)-$(VERSION)/$(subdir)

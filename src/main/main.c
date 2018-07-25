@@ -41,6 +41,7 @@
 
 #include <locale.h>
 #include <R_ext/Print.h>
+#include <sexp_inspector.h>
 
 #ifdef ENABLE_NLS
 void attribute_hidden nl_Rdummy(void)
@@ -1070,6 +1071,7 @@ static void end_Rmainloop(void)
     /* run the .Last function. If it gives an error, will drop back to main
        loop. */
     R_CleanUp(SA_DEFAULT, 0, 1);
+	sexp_inspector_close();
 }
 
 void run_Rmainloop(void)

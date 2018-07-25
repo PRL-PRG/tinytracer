@@ -21,10 +21,13 @@
 int Rf_initialize_R(int ac, char **av); /* in ../unix/system.c */
 
 #include <Rinterface.h>
+#include <sexp_inspector.h>
 
 int main(int ac, char **av)
 {
+
     R_running_as_main_program = 1;
+    sexp_inspector_init();
     Rf_initialize_R(ac, av);
     Rf_mainloop(); /* does not return */
     return 0;
