@@ -54,7 +54,7 @@ void sexp_inspector_allocation(SEXP sexp) {
 
     fake_id_sequence++;
 
-    fprintf(sexp_inspector_log, "A;%p;%l;", sexp, fake_id_sequence);
+    fprintf(sexp_inspector_log, "A;%p;%i;", sexp, fake_id_sequence);
     print_header(sexp);
     fprintf(sexp_inspector_log, "\n", sexp);
 
@@ -71,7 +71,7 @@ void sexp_inspector_gc(SEXP sexp) {
         int status = hashmap_remove(fake_id_dictionary, (uintptr_t) sexp);
     }
 
-    fprintf(sexp_inspector_log, "G;%p;%l;", sexp, r.value);
+    fprintf(sexp_inspector_log, "G;%p;%i;", sexp, r.value);
     print_header(sexp);
     fprintf(sexp_inspector_log, "\n", sexp);
 }
