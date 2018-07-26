@@ -15,8 +15,8 @@
 #include <Internal.h>
 
 void sexp_inspector_init();
-SEXP sexp_inspector_allocation(SEXP s);
-void sexp_inspector_gc(SEXP sexp);
+void sexp_inspector_allocation(SEXP);
+void sexp_inspector_gc(SEXP);
 void sexp_inspector_close();
 
 #endif //SEXP_INSPECTOR_H
