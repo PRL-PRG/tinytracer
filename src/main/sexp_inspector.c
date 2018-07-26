@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "hashmap.h"
 
 #define USE_RINTERNALS
 
@@ -10,7 +11,8 @@
 #include <Internal.h>
 
 FILE *sexp_inspector_log;
-
+map_t fake_id_dictionary;
+unsigned long fake_id_sequence;
 
 
 void sexp_inspector_init() {
@@ -19,8 +21,13 @@ void sexp_inspector_init() {
         sexp_inspector_log = NULL;
         return;
     }
+
     sexp_inspector_log = fopen(log_path, "w");
-    fprintf(sexp_inspector_log, "hook;address;type;scalar;obj;alt;gp;mark;debug;trace;spare;gcgen;gccls;named\n");
+    fprintf(sexp_inspector_log,
+            "hook;address;fake_id;type;scalar;obj;alt;gp;mark;debug;trace;spare;gcgen;gccls;named\n");
+
+    fake_id_dictionary = hashmap_new();
+    fake_id_sequence = 0L;
 }
 
 void print_header(SEXP sexp) {
@@ -45,16 +52,26 @@ void sexp_inspector_allocation(SEXP sexp) {
     if (sexp_inspector_log == NULL)
         return;
 
-    fprintf(sexp_inspector_log, "A;%p;", sexp);
+    fake_id_sequence++;
+
+    fprintf(sexp_inspector_log, "A;%p;%l;", sexp, fake_id_sequence);
     print_header(sexp);
     fprintf(sexp_inspector_log, "\n", sexp);
+
+    int status = hashmap_put(fake_id_dictionary, (uintptr_t) sexp, fake_id_sequence);
 }
 
 void sexp_inspector_gc(SEXP sexp) {
     if (sexp_inspector_log == NULL)
         return;
 
-    fprintf(sexp_inspector_log, "G;%p;", sexp);
+    hashmap_ret_t r = hashmap_get(fake_id_dictionary, (uintptr_t) sexp);
+
+    if (sexp->sxpinfo.mark == 1) {
+        int status = hashmap_remove(fake_id_dictionary, (uintptr_t) sexp);
+    }
+
+    fprintf(sexp_inspector_log, "G;%p;%l;", sexp, r.value);
     print_header(sexp);
     fprintf(sexp_inspector_log, "\n", sexp);
 }
