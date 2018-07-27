@@ -2992,6 +2992,7 @@ static void R_gc_internal(R_size_t size_needed)
 {
     // SEXP inspector loop is placed here because R_GenHeap is only accessible from memory.c
     {
+        sexp_inspector_inspect_all_known();
         for (int gen = 0; gen < NUM_OLD_GENERATIONS; gen++)
             for (int cls = 0; cls < NUM_NODE_CLASSES; cls++) {
                 if (R_GenHeap[cls].OldCount[gen] <= 0)

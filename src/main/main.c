@@ -1071,7 +1071,6 @@ static void end_Rmainloop(void)
     /* run the .Last function. If it gives an error, will drop back to main
        loop. */
     R_CleanUp(SA_DEFAULT, 0, 1);
-	sexp_inspector_close();
 }
 
 void run_Rmainloop(void)

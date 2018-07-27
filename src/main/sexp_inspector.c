@@ -13,6 +13,7 @@
 FILE *sexp_inspector_log;
 map_t fake_id_dictionary;
 unsigned long fake_id_sequence;
+unsigned long inspection_clock;
 
 
 void sexp_inspector_init() {
@@ -24,10 +25,11 @@ void sexp_inspector_init() {
 
     sexp_inspector_log = fopen(log_path, "w");
     fprintf(sexp_inspector_log,
-            "hook;address;fake_id;type;scalar;obj;alt;gp;mark;debug;trace;spare;gcgen;gccls;named\n");
+            "hook;inspection_clock;gc_clock;address;fake_id;type;scalar;obj;alt;gp;mark;debug;trace;spare;gcgen;gccls;named;\n");
 
     fake_id_dictionary = hashmap_new();
     fake_id_sequence = 0L;
+    inspection_clock = 0L;
 }
 
 void print_header(SEXP sexp) {
@@ -53,35 +55,51 @@ void sexp_inspector_allocation(SEXP sexp) {
         return;
 
     fake_id_sequence++;
-
-    fprintf(sexp_inspector_log, "A;%p;%i;", sexp, fake_id_sequence);
-    print_header(sexp);
-    fprintf(sexp_inspector_log, "\n", sexp);
-
     int status = hashmap_put(fake_id_dictionary, (uintptr_t) sexp, fake_id_sequence);
+
+    fprintf(sexp_inspector_log, "A;%lu;%p;%lu;", inspection_clock, sexp, fake_id_sequence);
+    print_header(sexp);
+    fprintf(sexp_inspector_log, "\n", status);
+}
+
+int sexp_inspector_inspect_one_known(hashmap_key_t sexp, hashmap_val_t fake_id) {
+
+    fprintf(sexp_inspector_log, "I;%lu;%p;%lu;", inspection_clock, (uintptr_t) sexp, fake_id);
+    print_header((SEXP) sexp);
+    fprintf(sexp_inspector_log, "\n");
+
+    return MAP_OK;
+}
+
+void sexp_inspector_inspect_all_known() {
+    if (sexp_inspector_log == NULL)
+        return;
+
+    hashmap_iterate(fake_id_dictionary, sexp_inspector_inspect_one_known);
+    //printf("inspection %lu", inspection_clock);
+    inspection_clock++;
 }
 
 void sexp_inspector_gc(SEXP sexp) {
     if (sexp_inspector_log == NULL)
         return;
 
-    hashmap_ret_t r = hashmap_get(fake_id_dictionary, (uintptr_t) sexp);
+    //hashmap_ret_t r = hashmap_get(fake_id_dictionary, (uintptr_t) sexp);
 
     if (sexp->sxpinfo.mark == 1) {
         int status = hashmap_remove(fake_id_dictionary, (uintptr_t) sexp);
     }
-
-    fprintf(sexp_inspector_log, "G;%p;%i;", sexp, r.value);
-    print_header(sexp);
-    fprintf(sexp_inspector_log, "\n", sexp);
 }
 
 void sexp_inspector_close() {
     if (sexp_inspector_log == NULL)
         return;
+
+    hashmap_iterate(fake_id_dictionary, sexp_inspector_inspect_one_known);
+    //printf("final inspection %lu", inspection_clock);
+    inspection_clock++;
+
     fclose(sexp_inspector_log);
 }
 
 // TODO investigate write barrier
-// NUM_OLD_GENERATIONS
-// NUM_NODE_CLASSES
