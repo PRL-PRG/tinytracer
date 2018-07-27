@@ -29,7 +29,7 @@ typedef struct {hashmap_val_t value; int status;} hashmap_ret_t;
  * PFany is a pointer to a function that can take two any_t arguments
  * and return an integer. Returns status code..
  */
-typedef int (*hashmap_PFany)(hashmap_val_t);
+typedef int (*hashmap_iter)(hashmap_key_t, hashmap_val_t);
 
 /*
  * map_t is a pointer to an internally maintained data structure.
@@ -50,7 +50,7 @@ extern map_t hashmap_new();
  * than MAP_OK the traversal is terminated. f must
  * not reenter any hashmap functions, or deadlock may arise.
  */
-extern int hashmap_iterate(map_t in, hashmap_PFany f);
+extern int hashmap_iterate(map_t in, hashmap_iter f);
 
 /*
  * Add an element to the hashmap. Return MAP_OK or MAP_OMEM.

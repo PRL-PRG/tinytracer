@@ -12,7 +12,7 @@
 
 /* We need to keep keys and values */
 typedef struct _hashmap_element{
-	/*char**/ unsigned long key;
+	hashmap_key_t key;
 	int in_use;
     hashmap_val_t data;
 } hashmap_element;
@@ -207,7 +207,7 @@ hashmap_ret_t hashmap_get(map_t in, hashmap_key_t key){
  * additional any_t argument is passed to the function as its first
  * argument and the hashmap element is the second.
  */
-int hashmap_iterate(map_t in, hashmap_PFany f) {
+int hashmap_iterate(map_t in, hashmap_iter f) {
 	int i;
 
 	/* Cast the hashmap */
@@ -221,7 +221,7 @@ int hashmap_iterate(map_t in, hashmap_PFany f) {
 	for(i = 0; i< m->table_size; i++)
 		if(m->data[i].in_use != 0) {
             hashmap_val_t data = m->data[i].data;
-			int status = f(data);
+			int status = f(m->data[i].key, data);
 			if (status != MAP_OK) {
 				return status;
 			}
