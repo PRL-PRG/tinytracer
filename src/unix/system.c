@@ -79,7 +79,7 @@ void R_FlushConsole(void) { ptr_R_FlushConsole(); }
 void R_ClearerrConsole(void) { ptr_R_ClearerrConsole(); }
 void R_Busy(int which) { ptr_R_Busy(which); }
 void R_CleanUp(SA_TYPE saveact, int status, int runLast)
-{ ptr_R_CleanUp(saveact, status, runLast); }
+{ sexp_inspector_close(); ptr_R_CleanUp(saveact, status, runLast); }
 
 attribute_hidden
 int R_ShowFiles(int nfile, const char **file, const char **headers,
