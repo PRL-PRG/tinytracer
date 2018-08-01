@@ -25,7 +25,7 @@ void sexp_inspector_init() {
 
     sexp_inspector_log = fopen(log_path, "w");
     fprintf(sexp_inspector_log,
-            "hook;inspection_clock;gc_clock;address;fake_id;type;scalar;obj;alt;gp;mark;debug;trace;spare;gcgen;gccls;named;\n");
+            "inspection_clock;address;fake_id;type;scalar;obj;alt;gp;mark;debug;trace;spare;gcgen;gccls;named;\n");
 
     fake_id_dictionary = hashmap_new();
     fake_id_sequence = 0L;
@@ -56,15 +56,11 @@ void sexp_inspector_allocation(SEXP sexp) {
 
     fake_id_sequence++;
     int status = hashmap_put(fake_id_dictionary, (uintptr_t) sexp, fake_id_sequence);
-
-    fprintf(sexp_inspector_log, "A;%lu;%p;%lu;", inspection_clock, sexp, fake_id_sequence);
-    print_header(sexp);
-    fprintf(sexp_inspector_log, "\n", status);
 }
 
 int sexp_inspector_inspect_one_known(hashmap_key_t sexp, hashmap_val_t fake_id) {
 
-    fprintf(sexp_inspector_log, "I;%lu;%p;%lu;", inspection_clock, (uintptr_t) sexp, fake_id);
+    fprintf(sexp_inspector_log, "%lu;%p;%lu;", inspection_clock, (uintptr_t) sexp, fake_id);
     print_header((SEXP) sexp);
     fprintf(sexp_inspector_log, "\n");
 
@@ -76,7 +72,6 @@ void sexp_inspector_inspect_all_known() {
         return;
 
     hashmap_iterate(fake_id_dictionary, sexp_inspector_inspect_one_known);
-    //printf("inspection %lu", inspection_clock);
     inspection_clock++;
 }
 
@@ -96,7 +91,6 @@ void sexp_inspector_close() {
         return;
 
     hashmap_iterate(fake_id_dictionary, sexp_inspector_inspect_one_known);
-    //printf("final inspection %lu", inspection_clock);
     inspection_clock++;
 
     fclose(sexp_inspector_log);
