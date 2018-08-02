@@ -1780,6 +1780,29 @@ static void RunGenCollect(R_size_t size_needed)
     FORWARD_NODE(R_StringHash);
     PROCESS_NODES();
 
+#ifndef PROTECTCHECK
+    for(i=0; i< NUM_SMALL_NODE_CLASSES;i++){
+	s = NEXT_NODE(R_GenHeap[i].New);
+	while (s != R_GenHeap[i].New) {
+	    SEXP next = NEXT_NODE(s);
+	    if (TYPEOF(s) != NEWSXP) 
+		if (TYPEOF(s) != FREESXP) 
+		    sexp_inspector_gc(s);
+	    s = next;
+	}
+    }
+    for (i = CUSTOM_NODE_CLASS; i <= LARGE_NODE_CLASS; i++) {
+	s = NEXT_NODE(R_GenHeap[i].New);
+	while (s != R_GenHeap[i].New) {
+	    SEXP next = NEXT_NODE(s);
+	    if (TYPEOF(s) != NEWSXP) 
+		if (TYPEOF(s) != FREESXP) 
+		    sexp_inspector_gc(s);
+	    s = next;
+	}
+    }
+#endif //PROTECTCHECK    
+
 #ifdef PROTECTCHECK
     for(i=0; i< NUM_SMALL_NODE_CLASSES;i++){
 	s = NEXT_NODE(R_GenHeap[i].New);
@@ -1787,6 +1810,7 @@ static void RunGenCollect(R_size_t size_needed)
 	    SEXP next = NEXT_NODE(s);
 	    if (TYPEOF(s) != NEWSXP) {
 		if (TYPEOF(s) != FREESXP) {
+		    sexp_inspector_gc(s);
 		    SETOLDTYPE(s, TYPEOF(s));
 		    SET_TYPEOF(s, FREESXP);
 		}
@@ -1809,6 +1833,7 @@ static void RunGenCollect(R_size_t size_needed)
 			R_size_t size = getVecSizeInVEC(s);
 			SET_STDVEC_LENGTH(s, size);
 		    }
+		    sexp_inspector_gc(s);
 		    SETOLDTYPE(s, TYPEOF(s));
 		    SET_TYPEOF(s, FREESXP);
 		}
@@ -2567,7 +2592,7 @@ SEXP allocVector3(SEXPTYPE type, R_xlen_t length, R_allocator_t *allocator)
 	    }
 	    VALGRIND_MAKE_MEM_UNDEFINED(STDVEC_DATAPTR(s), actual_size);
 #endif
-	    s->sxpinfo = UnmarkedNodeTemplate.sxpinfo;
+	    s->sxpinfo = UnmarkedNodeTemplate.sxpinfo; // FIXME point of interest
 	    SETSCALAR(s, 1);
 	    SET_NODE_CLASS(s, node_class);
 	    R_SmallVallocSize += alloc_size;
@@ -2580,7 +2605,7 @@ SEXP allocVector3(SEXPTYPE type, R_xlen_t length, R_allocator_t *allocator)
 	    SET_NAMED(s, 0);
 	    INIT_REFCNT(s);
 
-        sexp_inspector_allocation(s);
+	    sexp_inspector_allocation(s);
 
 	    return(s);
 	}
@@ -2668,7 +2693,7 @@ SEXP allocVector3(SEXPTYPE type, R_xlen_t length, R_allocator_t *allocator)
 	s = allocList((int) length);
 	SET_TYPEOF(s, LANGSXP);
 
-    sexp_inspector_allocation(s);
+	sexp_inspector_allocation(s);
 	return s;
     case LISTSXP:
 #ifdef LONG_VECTOR_SUPPORT
@@ -2991,20 +3016,7 @@ static void gc_end_timing(void)
 static void R_gc_internal(R_size_t size_needed)
 {
     // SEXP inspector loop is placed here because R_GenHeap is only accessible from memory.c
-    {
-        sexp_inspector_inspect_all_known();
-        for (int gen = 0; gen < NUM_OLD_GENERATIONS; gen++)
-            for (int cls = 0; cls < NUM_NODE_CLASSES; cls++) {
-                if (R_GenHeap[cls].OldCount[gen] <= 0)
-                    break;
-                SEXP cursor_sexp = R_GenHeap[cls].Old[gen]->gengc_next_node;
-                while (cursor_sexp != R_GenHeap[cls].Old[gen]) {
-                    SEXP next_sexp = cursor_sexp->gengc_next_node;
-                    sexp_inspector_gc(next_sexp);
-                    cursor_sexp = next_sexp;
-                }
-            }
-    }
+    sexp_inspector_inspect_all_known();
 
     if (!R_GCEnabled) {
       if (NO_FREE_NODES())
