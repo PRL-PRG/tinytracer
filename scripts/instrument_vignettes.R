@@ -86,13 +86,24 @@ prepare_working_directory <- function(working_directory,
   })
 }
 
+# Vignettes can depend on files present in the vignette folder. These files may
+# or may not be necessary for the vignettes to run. This creates a temporary
+# folders and copies all those files so that each vignette has a private copy of
+# each file.
+prepare_working_directories <- function(info)
+  apply(info, 1, function(item) 
+    prepare_working_directory(
+      working_directory = item['working_directory'], 
+      source_directory = item['source_directory'], 
+      data_directory = item['data_directory']))
+
 # Reads the source file pointed to by path and instruments all sections that
 # expect errors by wrapping them in a try call.
-read_file_and_instrument_error_blocks <- function(path) { 
+instrument_vignette_source <- function(source_path, instrumented_path) { 
   
   # Read in the entire source file from the specified path. Now we have a vector
   # of strings, each element is a single line.
-  lines <- readLines(path)
+  lines <- readLines(source_path)
   
   # We iterate through the source. With each line we either transform it in one
   # of several ways or return it as is. The transformation depends on the state
@@ -132,7 +143,7 @@ read_file_and_instrument_error_blocks <- function(path) {
     # section and encounter the start of a non-error section we have to finish
     # the previous try instruction and unset the prepend flag.
     } else if (prepend && !error_on_pattern_found && 
-               str_detect(line, section_pattern)) {
+               str_detect(line, "^[ \t]*##")) {
       prepend <- FALSE
       lines[i] <- paste0("})", line)
     }
@@ -144,9 +155,16 @@ read_file_and_instrument_error_blocks <- function(path) {
   if (prepend) 
     lines[length(lines)] <- paste0(lines[length(lines)], "}, silent=TRUE)")
   
-  # Return the modified code.
-  lines
+  # Save the modified source code to a file.
+  write(lines, file=instrumented_path)
 }
+
+# Instrument source files by wrapping sections where errors might occur with try
+# statements.
+instrument_vignette_sources <- function(info)
+  apply(info, 1, function(item) 
+    instrument_vignette_source(item['source_file'], 
+                               item['instrumented_source_file']))
 
 # Compiles the vignette source file into bytecode and creates another file that
 # can be used to execute the compiled code. In other words, if the vignettes is
@@ -158,6 +176,12 @@ compile_vignette_to_bytecode_and_create_loader <- function(source_path,
   loader_source <- paste0("compiler::loadcmp('", compiled_path, "')")
   write(loader_source, file=loader_path)
 }
+
+compile_vignettes_to_bytecode_and_create_loaders <- function(info)
+  apply(info, 1, function(item) 
+    compile_vignette_to_bytecode_and_create_loader(item['source_file'], 
+                                                   item['compiled_source_file'],
+                                                   item['runnable_source_file']))
 
 # Lists all vignettes for a list of packages. If a list of packages is not
 # provided, it lists vignettes for all installed packages. The list of vignettes
@@ -238,15 +262,18 @@ provide_instrumentation_info <- function(info,
                    runnable_source_file=runnable_source_files)
 }
 
-# TODO
-# prepare_working_directories <- function(extended_info)
-#   lapply(extended_info)
-#   prepare_working_directory(working_directory, source_directory, data_directory)
-# 
-# main <- function() {
-#   info <- list_vignettes_for_packages(c("stringr", "dplyr"))
-#   
-#   info <- provide_instrumentation_info(info,
-#                                        working_directory_root="/tmp/vignettes",
-#                                        compile=TRUE)
+main <- function(packages=installed.packages()[, 1], 
+                 working_directory_root="/tmp/vignettes", 
+                 compile=TRUE) {
+  
+  info <- list_vignettes_for_packages(packages)
+  info <- provide_instrumentation_info(info, working_directory_root, compile)
+  
+  prepare_working_directories(info)
+  instrument_vignette_sources(info)
+  
+  if (compile)
+    compile_vignettes_to_bytecode_and_create_loaders(info)
+  
+  info
 }
