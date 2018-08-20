@@ -198,9 +198,11 @@ compile_vignette_to_bytecode_and_create_loader <- function(source_path,
                                                            compiled_path, 
                                                            loader_path) {
   if (file.exists(source_path)) {
-    cmpfile(source_path, compiled_path, verbose=FALSE)
-    loader_source <- paste0("compiler::loadcmp('", compiled_path, "')")
-    write(loader_source, file=loader_path)
+    try({
+      cmpfile(source_path, compiled_path, verbose=FALSE)
+      loader_source <- paste0("compiler::loadcmp('", compiled_path, "')")
+      write(loader_source, file=loader_path)
+    })
   }
 }
 
