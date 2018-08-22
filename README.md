@@ -11,5 +11,5 @@ How to build:
 How to run:
 
 ```bash
-SEXP_INSPECTOR_LOG="sexp_inspector.log" bin/R
+SEXP_INSPECTOR_TYPES="sexp_types.csv" bin/R    # type analysis
 ```
