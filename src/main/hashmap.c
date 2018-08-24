@@ -207,7 +207,7 @@ hashmap_ret_t hashmap_get(map_t in, hashmap_key_t key){
  * additional any_t argument is passed to the function as its first
  * argument and the hashmap element is the second.
  */
-int hashmap_iterate(map_t in, hashmap_iter f) {
+int hashmap_iterate(map_t in, hashmap_iter f, void *extra) {
 	int i;
 
 	/* Cast the hashmap */
@@ -221,7 +221,7 @@ int hashmap_iterate(map_t in, hashmap_iter f) {
 	for(i = 0; i< m->table_size; i++)
 		if(m->data[i].in_use != 0) {
             hashmap_val_t data = m->data[i].data;
-			int status = f(m->data[i].key, data);
+			int status = f(m->data[i].key, data, extra);
 			if (status != MAP_OK) {
 				return status;
 			}
@@ -252,7 +252,7 @@ int hashmap_remove(map_t in, /*char**/ hashmap_key_t key){
             if (m->data[curr].key == key){
                 /* Blank out the fields */
                 m->data[curr].in_use = 0;
-                m->data[curr].data = /*NULL*/ 0;
+                m->data[curr].data = NULL;
                 m->data[curr].key = /*NULL*/ 0;
 
                 /* Reduce the size */
