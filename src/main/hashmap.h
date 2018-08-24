@@ -10,6 +10,7 @@
 #define __HASHMAP_H__
 
 #include <stdint.h>
+#include "sexp_info.h"
 
 #define MAP_MISSING -3  /* No such element */
 #define MAP_FULL -2 	/* Hashmap is full */
@@ -21,7 +22,7 @@
  * the hashmap.
  */
 typedef void *hashmap_any_t;
-typedef unsigned long hashmap_val_t;
+typedef sexp_info hashmap_val_t;
 typedef uintptr_t hashmap_key_t;
 typedef struct {hashmap_val_t value; int status;} hashmap_ret_t;
 
@@ -29,7 +30,7 @@ typedef struct {hashmap_val_t value; int status;} hashmap_ret_t;
  * PFany is a pointer to a function that can take two any_t arguments
  * and return an integer. Returns status code..
  */
-typedef int (*hashmap_iter)(hashmap_key_t, hashmap_val_t);
+typedef int (*hashmap_iter)(hashmap_key_t, hashmap_val_t, void *extra);
 
 /*
  * map_t is a pointer to an internally maintained data structure.
@@ -40,7 +41,7 @@ typedef hashmap_any_t map_t;
 
 /*
  * Return an empty hashmap. Returns NULL if empty.
-*/
+ */
 extern map_t hashmap_new();
 
 /*
@@ -49,8 +50,11 @@ extern map_t hashmap_new();
  * return a map status code. If it returns anything other
  * than MAP_OK the traversal is terminated. f must
  * not reenter any hashmap functions, or deadlock may arise.
+ * There is an exra argument that can be used for arbitrary
+ * purposes by the programmer, for instance: for returning
+ * results.
  */
-extern int hashmap_iterate(map_t in, hashmap_iter f);
+extern int hashmap_iterate(map_t in, hashmap_iter f, void *extra);
 
 /*
  * Add an element to the hashmap. Return MAP_OK or MAP_OMEM.

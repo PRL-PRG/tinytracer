@@ -1,9 +1,12 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "hashmap.h"
+#include "extensible_array.h"
 
 #define USE_RINTERNALS
 
 #include "../include/Rinternals.h"
+#include "sexp_info.h"
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
@@ -12,129 +15,147 @@
 #include <Defn.h>
 #include <Internal.h>
 
-unsigned int analyses = 0;
 FILE *sexp_inspector_types;
+FILE *sexp_inspector_lived_gc_cycles;
 FILE *sexp_inspector_debug;
+
+unsigned int active_analyses = 0;
 map_t fake_id_dictionary;
 unsigned long fake_id_sequence;
-unsigned long inspection_clock;
+unsigned long current_gc_cycle;
+ext_unsigned_long_array lived_gc_cycles;
 
 // type counter
 unsigned long sexp_counter;
 unsigned long type_counters[25+1];
 
-typedef struct {
-    // metadata
-    SEXP          address;
-    unsigned long fake_id;
-    unsigned long initial_inspection_clock;
-    unsigned long final_inspection_clock;
-    // header
-    unsigned int  sexp_type;
-    unsigned int  scalar;
-    unsigned int  obj;
-    unsigned int  alt;
-    unsigned int  gp;
-    unsigned int  mark;
-    unsigned int  debug;
-    unsigned int  trace;
-    unsigned int  spare;
-    unsigned int  gcgen;
-    unsigned int  gccls;
-    unsigned int  named;
-} sexp_info;
-
 void sexp_inspector_init() {
+    // Initialize an output file for SEXP type analysis, if path is provided.
     char *types_path = getenv("SEXP_INSPECTOR_TYPES");
     if (types_path == NULL) {
         sexp_inspector_types = NULL;
     } else {
-        analyses++;
+        active_analyses++;
         sexp_inspector_types = fopen(types_path, "w");
         fprintf(sexp_inspector_types, "type;type_name;count;percent\n");
     }
 
-    //fprintf(sexp_inspector_log,
-    //        "inspection_clock;address;fake_id;sexp_type;scalar;obj;alt;gp;mark;debug;trace;spare;gcgen;gccls;named;"
-    //                "car_id;tag_id;cdr_id;car_address;tag_address;cdr_address;data_length;data_truelength;data;\n")
+    // Initialize an output file for SEXP length-of-life analysis, if path is provided.
+    char *lives_path = getenv("SEXP_INSPECTOR_LIVES");
+    if (lives_path == NULL) {
+        sexp_inspector_lived_gc_cycles = NULL;
+    } else {
+        active_analyses++;
+        sexp_inspector_lived_gc_cycles = fopen(lives_path, "w");
+        init_unsigned_long(&lived_gc_cycles, 128);
+        fprintf(sexp_inspector_lived_gc_cycles, "gc_cycles;count;percent\n");
+    }
 
-    if (analyses > 0) {
+    if (active_analyses > 0) {
         char *debug_path = getenv("SEXP_INSPECTOR_DEBUG");
         sexp_inspector_debug = fopen(debug_path, "w");
 
         fake_id_dictionary = hashmap_new();
         fake_id_sequence = 0L;
-        inspection_clock = 0L;
+        current_gc_cycle = 0L;
     }
 }
 
 void sexp_inspector_allocation(SEXP sexp) {
-    if (analyses == 0)
+    if (active_analyses == 0)
         return;
 
-    fake_id_sequence++;
-    int status = hashmap_put(fake_id_dictionary, (uintptr_t) sexp, fake_id_sequence);
+    sexp_info sexp_info = malloc(sizeof(sexp_info));
+    sexp_info->fake_id = ++fake_id_sequence;
+    sexp_info->initial_gc_cycle = current_gc_cycle;
 
+    hashmap_put(fake_id_dictionary, (uintptr_t) sexp, sexp_info);
+
+    // SEXP type analysis.
     type_counters[TYPEOF(sexp)]++;
     sexp_counter++;
 
     if (sexp_inspector_debug != NULL)
-        fprintf(sexp_inspector_debug, "allocating inspection_clock=%i sexp=%p fake_id=%lu\n",
-                inspection_clock, (uintptr_t) sexp, fake_id_sequence);
+        fprintf(sexp_inspector_debug, "allocating current_gc_cycle=%lu sexp=%p fake_id=%lu\n",
+                current_gc_cycle, (void *) sexp, fake_id_sequence);
 }
 
-int sexp_inspector_inspect_one_known(hashmap_key_t sexp, hashmap_val_t fake_id) {
-
-    //fprintf(sexp_inspector_log, "%lu;%p;%lu;", inspection_clock, (uintptr_t) sexp, fake_id);
-    //print_header((SEXP) sexp);
-    //print_body((SEXP) sexp);
-    //fprintf(sexp_inspector_log, "\n");
-
+int sexp_inspector_inspect_one_known(hashmap_key_t sexp, hashmap_val_t sexp_info) {
     if (sexp_inspector_debug != NULL)
-        fprintf(sexp_inspector_debug, "inspecting inspection_clock=%i sexp=%p fake_id=%lu\n",
-                inspection_clock, (uintptr_t) sexp, fake_id);
+        fprintf(sexp_inspector_debug, "inspecting current_gc_cycle=%lu sexp=%p fake_id=%lu\n",
+                current_gc_cycle, (void *) sexp, sexp_info->fake_id);
 
     return MAP_OK;
 }
 
 void sexp_inspector_inspect_all_known() {
-    if (analyses == 0)
+    if (active_analyses == 0)
         return;
 
-    hashmap_iterate(fake_id_dictionary, sexp_inspector_inspect_one_known);
-    inspection_clock++;
+    hashmap_iterate(fake_id_dictionary, sexp_inspector_inspect_one_known, NULL);
+    current_gc_cycle++;
 }
 
 void sexp_inspector_gc(SEXP sexp) {
-    if (analyses == 0)
+    if (active_analyses == 0)
         return;
 
     hashmap_ret_t r = hashmap_get(fake_id_dictionary, (uintptr_t) sexp);
-    unsigned long fake_id = r.status == MAP_OK ? r.value : 0;
+    unsigned long fake_id = r.status == MAP_OK ? r.value->fake_id : 0;
 
-    int status = hashmap_remove(fake_id_dictionary, (uintptr_t) sexp);
+    if (sexp_inspector_lived_gc_cycles != NULL) {
+        if (r.status == MAP_OK)
+            increment_unsigned_long(&lived_gc_cycles, current_gc_cycle - r.value->initial_gc_cycle);
+        else
+            if (sexp_inspector_debug != NULL)
+                fprintf(sexp_inspector_debug, "gc unknown SEXP current_gc_cycle=%lu sexp=%p fake_id=%lu\n",
+                        current_gc_cycle, (void *) sexp, fake_id);
+    }
+
+    hashmap_remove(fake_id_dictionary, (uintptr_t) sexp);
 
     if (sexp_inspector_debug != NULL)
-        fprintf(sexp_inspector_debug, "gc unmark inspection_clock=%i sexp=%p fake_id=%lu\n",
-                inspection_clock, (uintptr_t) sexp, fake_id);
+        fprintf(sexp_inspector_debug, "gc unmark current_gc_cycle=%lu sexp=%p fake_id=%lu\n",
+                current_gc_cycle, (void *) sexp, fake_id);
 }
 
 void write_out_types() {
     for (int i = 0; i < 25+1; i++)
-        fprintf(sexp_inspector_types, "%i;%s;%u;%f\n", i, sexptype2char(i),
+        fprintf(sexp_inspector_types, "%i;%s;%lu;%f\n", i, sexptype2char(i),
                 type_counters[i], 100 * ((double) type_counters[i]) / ((double) sexp_counter));
 }
 
+int record_live_objects_length_of_life(hashmap_key_t sexp, hashmap_val_t sexp_info, void *extra) {
+    increment_unsigned_long(&lived_gc_cycles, current_gc_cycle - sexp_info->initial_gc_cycle);
+    return MAP_OK;
+}
+
+
+void write_out_lives() {
+    hashmap_iterate(fake_id_dictionary, record_live_objects_length_of_life, NULL);
+    for (unsigned int i = 1; i < current_gc_cycle; i++)
+        if (i < lived_gc_cycles.size)
+            fprintf(sexp_inspector_lived_gc_cycles, "%i;%lu;%f\n", i, lived_gc_cycles.array[i],
+                    100 * ((double) lived_gc_cycles.array[i]) / ((double) sexp_counter));
+        else
+            fprintf(sexp_inspector_lived_gc_cycles, "%i;%lu;%f\n", i, 0L, 0.);
+}
+
 void sexp_inspector_close() {
-    if (analyses == 0)
+    if (active_analyses == 0)
         return;
 
-    hashmap_iterate(fake_id_dictionary, sexp_inspector_inspect_one_known);
-    inspection_clock++;
+    hashmap_iterate(fake_id_dictionary, sexp_inspector_inspect_one_known, NULL);
+    current_gc_cycle++;
 
     if (sexp_inspector_types != NULL) {
         write_out_types();
         fclose(sexp_inspector_types);
+    }
+
+    if (sexp_inspector_lived_gc_cycles != NULL) {
+        write_out_lives();
+        fclose(sexp_inspector_lived_gc_cycles);
     }
 
     if (sexp_inspector_debug != NULL)
