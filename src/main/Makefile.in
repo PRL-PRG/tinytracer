@@ -37,7 +37,7 @@ SOURCES_C = \
 	unique.c util.c \
 	version.c \
 	g_alab_her.c g_cntrlify.c g_fontdb.c g_her_glyph.c \
-	sexp_inspector.c hashmap.c
+	sexp_inspector.c hashmap.c extensible_array.c
 
 SOURCES_F =  xxxpr.f
 
