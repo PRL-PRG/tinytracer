@@ -1,18 +1,7 @@
-//
-// Created by kondziu on 23.7.18.
-//
-
 #ifndef SEXP_INSPECTOR_H
 #define SEXP_INSPECTOR_H
 
-#define USE_RINTERNALS
-
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
-#include <Defn.h>
-#include <Internal.h>
+#include "sexp_inspector_r_connection.h"
 
 void sexp_inspector_init();
 void sexp_inspector_allocation(SEXP);

@@ -5,12 +5,13 @@
  *
  * Modified by Pete Warden to fix a serious performance problem, support strings as keys
  * and removed thread synchronization - http://petewarden.typepad.com
+ *
+ * Modified by Konrad Siek to fit the round hole into the square peg of this project. Yeah, I know what I said.
  */
 #ifndef __HASHMAP_H__
 #define __HASHMAP_H__
 
 #include <stdint.h>
-#include "sexp_info.h"
 
 #define MAP_MISSING -3  /* No such element */
 #define MAP_FULL -2 	/* Hashmap is full */
@@ -22,7 +23,7 @@
  * the hashmap.
  */
 typedef void *hashmap_any_t;
-typedef sexp_info hashmap_val_t;
+typedef void *hashmap_val_t;
 typedef uintptr_t hashmap_key_t;
 typedef struct {hashmap_val_t value; int status;} hashmap_ret_t;
 
