@@ -1,15 +1,5 @@
 #define USE_RINTERNALS
 
-#include "../include/Rinternals.h"
-#include "sexp_info.h"
-
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
-
-#include <Defn.h>
-#include <Internal.h>
-
 #include "sexp_inspector_shared.h"
 #include "sexp_inspector_types.h"
 
@@ -34,7 +24,7 @@ void sexp_inspector_types_initialize() {
 }
 
 void sexp_inspector_types_close() {
-    if (sexp_inspector_types_is_running) {
+    if (sexp_inspector_types_is_running()) {
         for (int i = 0; i < NUM_TYPES; i++)
             fprintf(sexp_inspector_types, "%i;%s;%lu;%f\n",
                     i,

@@ -18,24 +18,21 @@ inline int sexp_inspector_debug_is_running() {
 
 void sexp_inspector_debug_note_allocation(SEXP sexp) {
     fprintf(sexp_inspector_debug,
-            "allocating current_gc_cycle=%lu sexp=%p fake_id=%lu\n",
-            sexp_inspector_read_gc_counter(),
+            "allocating sexp=%p fake_id=%lu\n",
             (void *) sexp,
             sexp_inspector_read_fake_id_sequence());
 }
 
 void sexp_inspector_debug_note_gc_unmark(SEXP sexp, unsigned long fake_id) {
     fprintf(sexp_inspector_debug,
-            "gc unmark current_gc_cycle=%lu sexp=%p fake_id=%lu\n",
-            sexp_inspector_read_gc_counter(),
+            "gc unmark sexp=%p fake_id=%lu\n",
             (void *) sexp,
             fake_id);
 }
 
 void sexp_inspector_debug_note_unknown_SEXP(SEXP sexp) {
     fprintf(sexp_inspector_debug,
-            "gc unknown SEXP current_gc_cycle=%lu sexp=%p \n",
-            sexp_inspector_read_gc_counter(),
+            "gc unknown SEXP sexp=%p \n",
             (void *) sexp);
 }
 

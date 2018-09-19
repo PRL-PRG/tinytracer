@@ -1,7 +1,5 @@
 #define USE_RINTERNALS
 
-#include "sexp_info.h"
-
 #include "sexp_inspector_shared.h"
 #include "sexp_inspector_composition.h"
 
@@ -25,7 +23,7 @@ void sexp_inspector_composition_initialize() {
 }
 
 void sexp_inspector_composition_close() {
-    if (sexp_inspector_composition != NULL) {
+    if (sexp_inspector_composition_is_running()) {
         for (int i = 0; i < 25+1; i++)
             for (int car_i = 0; car_i < 25+1; car_i++)
                 for (int tag_i = 0; tag_i < 25+1; tag_i++)
