@@ -1,10 +1,119 @@
-#define USE_RINTERNALS
-
+#include <stdarg.h>
+#include <stddef.h>
+#include <string.h>
 #include "sexp_inspector_shared.h"
 #include "sexp_inspector_composition.h"
+#include "extensible_array.h"
 
+typedef int trie_value_t;
+typedef unsigned int trie_payload_t;
+
+struct trie {
+    trie_value_t value;
+    struct trie *left;
+    struct trie *right;
+    union {
+        struct trie *next_level;
+        trie_payload_t counter;
+    } payload;
+    short int leaf;
+};
+
+struct trie *composition = NULL;
+
+struct trie *new_trie(trie_value_t type) {
+    struct trie *node = (struct trie *) malloc(sizeof(struct trie));
+    node->left = NULL;
+    node->right = NULL;
+    node->value = type;
+    return node;
+}
+
+struct trie *new_trie_with_value(trie_value_t type, trie_payload_t value) {
+    struct trie *node = new_trie(type);
+    node->payload.counter = value;
+    node->leaf = 1;
+    return node;
+}
+
+struct trie *new_trie_with_level_ptr(trie_value_t type, struct trie *next_level) {
+    struct trie *node = new_trie(type);
+    node->payload.next_level = next_level;
+    node->leaf = 0;
+    return node;
+}
+
+// assuming level_root != NULL
+struct trie *find_or_create_node_within_level(struct trie *level_root, trie_value_t type) {
+    struct trie *current = level_root;
+    while(1)
+        if (current->value == type)
+            return current;
+        else
+            if (current->value < type) {
+                if (current->left == NULL) {
+                    current->left = new_trie_with_level_ptr(type, NULL);
+                    return current->left;
+                } else {
+                    current = current->left;
+                }
+            } else /*current->value > type*/ {
+                if (current->right == NULL) {
+                    current->right = new_trie_with_level_ptr(type, NULL);
+                    return current->right;
+                } else {
+                    current = current->right;
+                }
+            }
+}
+
+void recursive_traverse(void (*f)(trie_value_t[], int, int), struct trie *elem, trie_value_t values[], int levels) {
+    if(elem == NULL)
+        return;
+
+    recursive_traverse(f, elem->left, values, levels);
+    values[levels] = elem->value;
+    if(elem->leaf)
+        (*f)(values, levels, elem->payload.counter);
+    else
+        recursive_traverse(f, elem->payload.next_level, values, levels + 1);
+    recursive_traverse(f, elem->right, values, levels);
+}
+
+struct trie *create_new_simple_tree(trie_value_t values[], int offset, int length) {
+    struct trie *tree = NULL;
+    for (int i = length - 1; i >= offset; i--) {
+        if (tree == NULL)
+            tree = new_trie_with_value(values[i], 1);
+        else
+            tree = new_trie_with_level_ptr(values[i], tree);
+    }
+    return tree;
+}
+
+void traverse_and_increment(struct trie *elem, trie_value_t values[], int offset, int length) {
+    if (elem->leaf) {
+        elem->payload.counter++;
+        return;
+    }
+
+    struct trie *leaf = find_or_create_node_within_level(elem, values[offset]);
+    if (leaf->payload.next_level == NULL)
+        leaf->payload.next_level = create_new_simple_tree(values, offset + 1, length);
+    else
+        traverse_and_increment(leaf->payload.next_level, values, offset + 1, length);
+}
+
+
+void increment(trie_value_t values[], int levels) {
+    if (composition == NULL)
+        composition = create_new_simple_tree(values, 0, levels);
+    else
+        traverse_and_increment(composition, values, 0, levels);
+}
+
+unsigned long counts_in_type[26];
 FILE *sexp_inspector_composition;
-unsigned long type_compositions[25+1][25+1][25+1][25+1];
 
 inline int sexp_inspector_composition_is_running() {
     return sexp_inspector_composition != NULL;
@@ -18,37 +127,66 @@ void sexp_inspector_composition_initialize() {
     } else {
         sexp_inspector_bump_analysis_counter();
         sexp_inspector_composition = fopen(composition_path, "w");
-        fprintf(sexp_inspector_composition, "type;car_type;tag_type;cdr_type;count;percent\n");
+        fprintf(sexp_inspector_composition, "type;car_type;tag_type;cdr_type;count;percent;percent overall\n");
+
     }
 }
 
-void sexp_inspector_composition_close() {
-    if (sexp_inspector_composition_is_running()) {
-        for (int i = 0; i < 25+1; i++)
-            for (int car_i = 0; car_i < 25+1; car_i++)
-                for (int tag_i = 0; tag_i < 25+1; tag_i++)
-                    for (int cdr_i = 0; cdr_i < 25+1; cdr_i++) {
-                        unsigned long count = type_compositions[i][car_i][tag_i][cdr_i];
-                        if (count == 0)
-                            continue;
-                        fprintf(sexp_inspector_composition, "%s;%s;%s;%s;%lu;%f\n",
-                                sexptype2char(i),
-                                sexptype2char(car_i),
-                                sexptype2char(tag_i),
-                                sexptype2char(cdr_i),
-                                count,
-                                100 * ((double) count) / ((double) sexp_inspector_read_sexp_counter()));
-                    }
-        fclose(sexp_inspector_composition);
+char *make_unknown_string(int v) {
+    char *string = malloc(sizeof(char)*17);
+    snprintf(string, 17, "<%d>", v);
+    return string;
+}
+
+char *trie_value_to_string(trie_value_t v) {
+    switch(v) {
+        case NILSXP:     return "NILSXP";     /* 0 */
+        case SYMSXP:     return "SYMSXP";     /* 1 */
+        case LISTSXP:    return "LISTSXP";    /* 2 */
+        case CLOSXP:     return "CLOSXP";     /* 3 */
+        case ENVSXP:     return "ENVSXP";     /* 4 */
+        case PROMSXP:    return "PROMSXP";    /* 5 */
+        case LANGSXP:    return "LANGSXP";    /* 6 */
+        case SPECIALSXP: return "SPECIALSXP"; /* 7 */
+        case BUILTINSXP: return "BUILTINSXP"; /* 8 */
+        case CHARSXP:    return "CHARSXP";    /* 9 */
+        case LGLSXP:     return "LGLSXP";     /* 10 */
+        case 11:         return "<11>";       /* defunct */
+        case 12:         return "<12>";       /* defunct */
+        case INTSXP:     return "INTSXP";     /* 13 */
+        case REALSXP:    return "REALSXP";    /* 14 */
+        case CPLXSXP:    return "CPLXSXP";    /* 15 */
+        case STRSXP:     return "STRSXP";     /* 16 */
+        case DOTSXP:     return "DOTSXP";     /* 17 */
+        case ANYSXP:     return "ANYSXP";     /* 18 */
+        case VECSXP:     return "VECSXP";     /* 19 */
+        case EXPRSXP:    return "EXPRSXP";    /* 20 */
+        case BCODESXP:   return "BCODESXP";   /* 21 */
+        case EXTPTRSXP:  return "EXTPTRSXP";  /* 22 */
+        case WEAKREFSXP: return "WEAKREFSXP"; /* 23 */
+        case RAWSXP:     return "RAWSXP";     /* 24 */
+        case S4SXP:      return "S4SXP";      /* 25 */
+        case 26:         return "<26>";       /* unknown */
+        case 27:         return "<27>";       /* unknown */
+        case 28:         return "<28>";       /* unknown */
+        case 29:         return "<29>";       /* unknown */
+        case NEWSXP:     return "NEWSXP";     /* 30 */
+        case FREESXP:    return "FREESXP";    /* 31 */
+        case -1:         return "<missing>";
+        default:         return make_unknown_string(v);
     }
 }
 
+typedef enum {
+    SEXP_EMPTY, SEXP_TRIPLE, SEXP_VECTOR, SEXP_WEAKREF,
+    SEXP_EXTERNAL, SEXP_OTHER, SEXP_OFFSET
+} sexp_classification_t;
 
-void sexp_inspector_composition_register(SEXP sexp) {
-    switch(TYPEOF(sexp)) {
+sexp_classification_t classify_sexp(SEXPTYPE type) {
+    switch(type) {
         case NILSXP:
-            type_compositions[TYPEOF(sexp)][11][11][11]++;
-            break;
+        case S4SXP:/* TODO attrib analysis */
+            return SEXP_EMPTY;
 
         case SYMSXP:
         case LISTSXP:
@@ -57,11 +195,8 @@ void sexp_inspector_composition_register(SEXP sexp) {
         case PROMSXP:
         case LANGSXP:
         case DOTSXP:
-            type_compositions[TYPEOF(sexp)]
-            [(CAR(sexp) != NULL) ? TYPEOF(CAR(sexp)) : 11]
-            [(TAG(sexp) != NULL) ? TYPEOF(TAG(sexp)) : 11]
-            [(TAG(sexp) != NULL) ? TYPEOF(CDR(sexp)) : 11]++;
-            break;
+        case BCODESXP:/* TODO something fun */
+            return SEXP_TRIPLE;
 
         case LGLSXP:
         case INTSXP:
@@ -71,27 +206,171 @@ void sexp_inspector_composition_register(SEXP sexp) {
         case VECSXP:
         case EXPRSXP:
         case RAWSXP:
-
-            break;
-
-        case BCODESXP:
-            break;
-
-        case ANYSXP:
-            break;
+        case CHARSXP:
+            return SEXP_VECTOR;
 
         case EXTPTRSXP:
-            break;
+            return SEXP_EXTERNAL;
 
         case WEAKREFSXP:
-            break;
+            return SEXP_WEAKREF;
 
-        case S4SXP:
-            break;
+        case ANYSXP:
+            return SEXP_OTHER;
 
         case SPECIALSXP:
         case BUILTINSXP:
-        case CHARSXP:
+            return SEXP_OFFSET;
+    }
+}
+
+double percent_of(int count, int total) {
+    return 100 * (double) count / (double) total;
+}
+
+void print_composition(trie_value_t values[], int levels, int payload) {
+    trie_value_t type = values[0];
+    switch(classify_sexp(type)) {
+        case SEXP_EMPTY:
+            fprintf(sexp_inspector_composition,
+                    "%s,,,,%i,%f,%f\n",
+                    trie_value_to_string(type),
+                    payload,
+                    percent_of(payload, counts_in_type[type]),
+                    percent_of(payload, sexp_inspector_read_sexp_counter()));
+            break;
+
+        case SEXP_TRIPLE:
+            fprintf(sexp_inspector_composition,
+                    "%s,%s,%s,%s,%i,%f,%f\n",
+                    trie_value_to_string(type),
+                    trie_value_to_string(values[2]),
+                    trie_value_to_string(values[3]),
+                    trie_value_to_string(values[1]),
+                    payload,
+                    percent_of(payload, counts_in_type[type]),
+                    percent_of(payload, sexp_inspector_read_sexp_counter()));
+            break;
+
+        case SEXP_VECTOR:
+            fprintf(sexp_inspector_composition,
+                    "%s,%i,%i,,%i,%f,%f\n",
+                    trie_value_to_string(type),
+                    values[1],
+                    values[2],
+                    payload,
+                    percent_of(payload, counts_in_type[type]),
+                    percent_of(payload, sexp_inspector_read_sexp_counter()));
+            break;
+
+        case SEXP_EXTERNAL:
+            fprintf(sexp_inspector_composition,
+                    "%s,,%s,%s,%i,%f,%f\n",
+                    trie_value_to_string(type),
+                    trie_value_to_string(values[1]),
+                    trie_value_to_string(values[2]),
+                    payload,
+                    percent_of(payload, counts_in_type[type]),
+                    percent_of(payload, sexp_inspector_read_sexp_counter()));
+            break;
+
+        case SEXP_WEAKREF:
+            fprintf(sexp_inspector_composition,
+                    "%s,%s,%s,%s,%i,%f,%f\n",
+                    trie_value_to_string(type),
+                    trie_value_to_string(values[1]),
+                    trie_value_to_string(values[2]),
+                    trie_value_to_string(values[3]),
+                    payload,
+                    percent_of(payload, counts_in_type[type]),
+                    percent_of(payload, sexp_inspector_read_sexp_counter()));
+            break;
+
+        case SEXP_OFFSET:
+            fprintf(sexp_inspector_composition,
+                    "%s,%i,,,%i,%f,%f\n",
+                    trie_value_to_string(type),
+                    values[1],
+                    payload,
+                    percent_of(payload, counts_in_type[type]),
+                    percent_of(payload, sexp_inspector_read_sexp_counter()));
+            break;
+
+        case SEXP_OTHER:
+            fprintf(sexp_inspector_composition, "%s,", trie_value_to_string(type));
+            for (int i = levels; i > 0; i--)
+                fprintf(sexp_inspector_composition, "%s,", trie_value_to_string(values[i]));
+            for (int i = 4 - 1; i > levels; i--)
+                fprintf(sexp_inspector_composition, ",");
+            fprintf(sexp_inspector_composition, "%i,%f,%f\n", payload,
+                    percent_of(payload, counts_in_type[type]),
+                    percent_of(payload, sexp_inspector_read_sexp_counter()));
+            break;
+    }
+}
+
+void sexp_inspector_composition_close() {
+    if (!sexp_inspector_composition_is_running())
+        return;
+    trie_value_t values[4];
+    recursive_traverse(print_composition, composition, values, 0);
+    fclose(sexp_inspector_composition);
+}
+
+trie_value_t  sexp_to_trie_value(SEXP sexp){
+    //trie_value_t r = (sexp == NULL) ? -1 : TYPEOF(sexp);
+    //if (r > 25)
+        //printf("##### %d\n", r);
+    return (sexp == NULL) ? -1 : TYPEOF(sexp);
+}
+
+trie_value_t to_log(int v) {
+    return (v == 0) ? 0 : (8 * sizeof(int) - __builtin_clz(v));
+}
+
+void sexp_inspector_composition_register(SEXP sexp) {
+    counts_in_type[TYPEOF(sexp)]++;
+    switch(classify_sexp(TYPEOF(sexp))) {
+        case SEXP_EMPTY:
+            increment((trie_value_t[]){sexp_to_trie_value(sexp)}, 1);
+            break;
+
+        case SEXP_TRIPLE:
+            increment((trie_value_t[]){sexp_to_trie_value(sexp),
+                                       sexp_to_trie_value(TAG(sexp)),
+                                       sexp_to_trie_value(CDR(sexp)),
+                                       sexp_to_trie_value(CAR(sexp))}, 4);
+            break;
+
+        case SEXP_VECTOR:
+            increment((trie_value_t[]){sexp_to_trie_value(sexp),
+                                       to_log(LENGTH(sexp)),
+                                       to_log(TRUELENGTH(sexp))}, 3);
+            break;
+
+        case SEXP_EXTERNAL:
+            increment((trie_value_t[]){sexp_to_trie_value(sexp),
+                                       sexp_to_trie_value(TAG(sexp)),
+                                       sexp_to_trie_value(CDR(sexp))}, 3);
+            break;
+
+        case SEXP_WEAKREF:
+            increment((trie_value_t[]){sexp_to_trie_value(sexp),
+                                       sexp_to_trie_value(VECTOR_ELT(sexp, 0)),
+                                       sexp_to_trie_value(VECTOR_ELT(sexp, 1)),
+                                       sexp_to_trie_value(VECTOR_ELT(sexp, 2))}, 4);
+            break;
+
+        case SEXP_OFFSET:
+            increment((trie_value_t[]){sexp_to_trie_value(sexp),
+                                       PRIMOFFSET(sexp)}, 3);
+            break;
+
+        case SEXP_OTHER:
+            increment((trie_value_t[]){sexp_to_trie_value(sexp),
+                                       sexp_to_trie_value(CAR(sexp)),
+                                       sexp_to_trie_value(TAG(sexp)),
+                                       sexp_to_trie_value(CDR(sexp))}, 4);
             break;
     }
 }
