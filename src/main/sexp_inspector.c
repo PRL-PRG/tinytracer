@@ -22,7 +22,7 @@ void sexp_inspector_init() {
 void sexp_inspector_allocation(SEXP sexp) {
     if (!sexp_inspector_are_there_analyses())
         return;
-
+c
     sexp_inspector_register_fake_id(sexp);
     sexp_inspector_bump_sexp_counter();
 

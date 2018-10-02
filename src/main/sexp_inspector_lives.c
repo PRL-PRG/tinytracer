@@ -29,7 +29,7 @@ void sexp_inspector_lives_initialize() {
         sexp_inspector_bump_analysis_counter();
         sexp_inspector_lived_gc_cycles = fopen(lives_path, "w");
         init_unsigned_long(&lived_gc_cycles, (size_t) 128);
-        fprintf(sexp_inspector_lived_gc_cycles, "gc_cycles;count;percent\n");
+        fprintf(sexp_inspector_lived_gc_cycles, "gc_cycles,count,percent\n");
         initial_gc_cycle_map = hashmap_new();
     }
 }
@@ -53,10 +53,10 @@ void sexp_inspector_lives_close() {
                         record_live_objects_length_of_life, NULL);
         for (unsigned int i = 1; i < current_gc_cycle; i++)
             if (i < lived_gc_cycles.size)
-                fprintf(sexp_inspector_lived_gc_cycles, "%i;%lu;%f\n", i, lived_gc_cycles.array[i],
+                fprintf(sexp_inspector_lived_gc_cycles, "%i,%lu,%f\n", i, lived_gc_cycles.array[i],
                         100 * ((double) lived_gc_cycles.array[i]) / ((double) sexp_inspector_read_sexp_counter()));
             else
-                fprintf(sexp_inspector_lived_gc_cycles, "%i;%lu;%f\n", i, 0L, 0.);
+                fprintf(sexp_inspector_lived_gc_cycles, "%i,%lu,%f\n", i, 0L, 0.);
         fclose(sexp_inspector_lived_gc_cycles);
     }
 }

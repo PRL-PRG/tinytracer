@@ -23,6 +23,8 @@ struct trie *composition = NULL;
 
 struct trie *new_trie(trie_value_t type) {
     struct trie *node = (struct trie *) malloc(sizeof(struct trie));
+    if (node == NULL)
+        printf("ERROR: new trie cannot allocate memory");
     node->left = NULL;
     node->right = NULL;
     node->value = type;
@@ -127,7 +129,7 @@ void sexp_inspector_composition_initialize() {
     } else {
         sexp_inspector_bump_analysis_counter();
         sexp_inspector_composition = fopen(composition_path, "w");
-        fprintf(sexp_inspector_composition, "type;car_type;tag_type;cdr_type;count;percent;percent overall\n");
+        fprintf(sexp_inspector_composition, "type,car_type,tag_type,cdr_type,count,percent,percent overall\n");
 
     }
 }
@@ -173,7 +175,7 @@ char *trie_value_to_string(trie_value_t v) {
         case NEWSXP:     return "NEWSXP";     /* 30 */
         case FREESXP:    return "FREESXP";    /* 31 */
         case -1:         return "<missing>";
-        default:         return make_unknown_string(v);
+        default:         return "<unknown>";
     }
 }
 

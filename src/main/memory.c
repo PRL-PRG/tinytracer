@@ -2157,6 +2157,8 @@ void attribute_hidden InitMemory()
     ATTRIB(R_NilValue) = R_NilValue;
     MARK_NOT_MUTABLE(R_NilValue);
 
+    sexp_inspector_allocation(R_NilValue);
+
     R_BCNodeStackBase =
 	(R_bcstack_t *) malloc(R_BCNODESTACKSIZE * sizeof(R_bcstack_t));
     if (R_BCNodeStackBase == NULL)
@@ -2857,6 +2859,8 @@ SEXP allocVector3(SEXPTYPE type, R_xlen_t length, R_allocator_t *allocator)
     else if (type == RAWSXP)
 	VALGRIND_MAKE_MEM_UNDEFINED(RAW(s), actual_size);
 #endif
+
+    sexp_inspector_allocation(s);
     return s;
 }
 

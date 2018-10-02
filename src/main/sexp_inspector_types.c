@@ -19,14 +19,14 @@ void sexp_inspector_types_initialize() {
     } else {
         sexp_inspector_bump_analysis_counter();
         sexp_inspector_types = fopen(types_path, "w");
-        fprintf(sexp_inspector_types, "type;type_name;count;percent\n");
+        fprintf(sexp_inspector_types, "type,type_name,count,percent\n");
     }
 }
 
 void sexp_inspector_types_close() {
     if (sexp_inspector_types_is_running()) {
         for (int i = 0; i < NUM_TYPES; i++)
-            fprintf(sexp_inspector_types, "%i;%s;%lu;%f\n",
+            fprintf(sexp_inspector_types, "%i,%s,%lu,%f\n",
                     i,
                     sexptype2char(i),
                     type_counters[i],
