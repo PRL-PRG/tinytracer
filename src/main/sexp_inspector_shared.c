@@ -66,3 +66,7 @@ unsigned long sexp_inspector_read_sexp_counter() {
 unsigned long sexp_inspector_read_fake_id_sequence() {
     return fake_id_sequence;
 }
+
+void sexp_inspector_iterate_over_tracked_sexps(sexp_iter f, void *result) {
+    hashmap_iterate_keys(fake_id_dictionary, f, result);
+}

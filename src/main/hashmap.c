@@ -230,6 +230,34 @@ int hashmap_iterate(map_t in, hashmap_iter f, void *extra) {
     return MAP_OK;
 }
 
+
+/*
+ * Iterate the function parameter over each key in the hashmap.  The
+ * additional any_t argument is passed to the function as its first
+ * argument and the hashmap key is the second.
+ */
+int hashmap_iterate_keys(map_t in, hashmap_key_iter f, void *extra) {
+	int i;
+
+	/* Cast the hashmap */
+	hashmap_map* m = (hashmap_map*) in;
+
+	/* On empty hashmap, return immediately */
+	if (hashmap_length(m) <= 0)
+		return MAP_MISSING;
+
+	/* Linear probing */
+	for(i = 0; i< m->table_size; i++)
+		if(m->data[i].in_use != 0) {
+			int status = f(m->data[i].key, extra);
+			if (status != MAP_OK) {
+				return status;
+			}
+		}
+
+	return MAP_OK;
+}
+
 /*
  * Remove an element with that key from the map
  */

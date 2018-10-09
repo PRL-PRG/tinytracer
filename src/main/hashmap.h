@@ -28,10 +28,18 @@ typedef uintptr_t hashmap_key_t;
 typedef struct {hashmap_val_t value; int status;} hashmap_ret_t;
 
 /*
- * PFany is a pointer to a function that can take two any_t arguments
- * and return an integer. Returns status code..
+ * A pointer to a function that can take two arguments: key and value of the
+ * map and return an integer. The additional argument can be used for
+ * returning values. Returns status code.
  */
 typedef int (*hashmap_iter)(hashmap_key_t, hashmap_val_t, void *extra);
+
+/*
+ * A pointer to a function that can take one argument: a key
+ * and return an integer. The additional argument can be used for
+ * returning values. Returns status code.
+ */
+typedef int (*hashmap_key_iter)(hashmap_key_t, void *extra);
 
 /*
  * map_t is a pointer to an internally maintained data structure.
@@ -46,16 +54,28 @@ typedef hashmap_any_t map_t;
 extern map_t hashmap_new();
 
 /*
- * Iteratively call f with argument (item, data) for
+ * Iteratively call f with argument (key, value, data) for
  * each element data in the hashmap. The function must
  * return a map status code. If it returns anything other
- * than MAP_OK the traversal is terminated. f must
+ * than MAP_OK (int 0) the traversal is terminated. f must
  * not reenter any hashmap functions, or deadlock may arise.
- * There is an exra argument that can be used for arbitrary
+ * There is an extra argument that can be used for arbitrary
  * purposes by the programmer, for instance: for returning
  * results.
  */
 extern int hashmap_iterate(map_t in, hashmap_iter f, void *extra);
+
+/*
+ * Iteratively call f with argument (key, data) for
+ * each element data in the hashmap. The function must
+ * return a map status code. If it returns anything other
+ * than MAP_OK (int 0) the traversal is terminated. f must
+ * not reenter any hashmap functions, or deadlock may arise.
+ * There is an extra argument that can be used for arbitrary
+ * purposes by the programmer, for instance: for returning
+ * results.
+ */
+extern int hashmap_iterate_keys(map_t in, hashmap_key_iter f, void *extra);
 
 /*
  * Add an element to the hashmap. Return MAP_OK or MAP_OMEM.

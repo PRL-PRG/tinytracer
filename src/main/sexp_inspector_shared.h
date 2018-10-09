@@ -15,4 +15,7 @@ void sexp_inspector_bump_sexp_counter();
 unsigned long sexp_inspector_read_sexp_counter();
 unsigned long sexp_inspector_read_fake_id_sequence();
 
+typedef int (*sexp_iter)(SEXP, void *result);
+void sexp_inspector_iterate_over_tracked_sexps(sexp_iter, void *result);
+
 #endif //TINYTRACER_SEXP_INSPECTOR_SHARED_H

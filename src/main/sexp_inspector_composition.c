@@ -294,15 +294,29 @@ void print_composition(FILE *file, trie_value_t values[], int levels, int payloa
     }
 }
 
-void sexp_inspector_composition_close() {
-    if (!sexp_inspector_composition_is_running())
-        return;
+int register_just_the_one_straggler(SEXP straggler, void *result) {
+    sexp_inspector_composition_register(straggler);
+    return 0;
+}
 
+void register_stragglers() {
+    sexp_inspector_iterate_over_tracked_sexps(register_just_the_one_straggler, NULL);
+}
+
+void write_out_data() {
     trie_value_t values[4];
     FILE *file = fopen(composition_path, "w");
     fprintf(file, "type,car_type,tag_type,cdr_type,count\n");
     recursive_traverse(file, print_composition, composition, values, 0);
     fclose(file);
+}
+
+void sexp_inspector_composition_close() {
+    if (!sexp_inspector_composition_is_running())
+        return;
+
+    register_stragglers();
+    write_out_data();
 }
 
 trie_value_t  sexp_to_trie_value(SEXP sexp){
