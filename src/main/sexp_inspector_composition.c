@@ -246,8 +246,8 @@ void print_composition(FILE *file, trie_value_t values[], int levels, int payloa
             fprintf(file, "%s,%s,%s,%s,%i\n",
                     trie_value_to_string(type),
                     trie_value_to_string(values[2]),
-                    trie_value_to_string(values[3]),
                     trie_value_to_string(values[1]),
+                    trie_value_to_string(values[3]),
                     payload);
             break;
 
@@ -325,7 +325,7 @@ void sexp_inspector_composition_register(SEXP sexp) {
 
         case SEXP_TRIPLE:
             increment((trie_value_t[]){sexp_to_trie_value(sexp),
-                                       sexp_to_trie_value(TAG(sexp)), 
+                                       sexp_to_trie_value(TAG(sexp)),
                                        sexp_to_trie_value(CDR(sexp)),
                                        sexp_to_trie_value(CAR(sexp))}, 4);
             break;
