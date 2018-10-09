@@ -101,6 +101,8 @@ items=($(csvtool -t ',' namedcol item "$WORKING_DIR/info.csv" | tail -n +2))
 wds=($(csvtool -t ',' namedcol working_directory "$WORKING_DIR/info.csv" | tail -n +2))
 runnables=($(csvtool -t ',' namedcol instrumented_source_file "$WORKING_DIR/info.csv" | tail -n +2))
 
+echo composing parameter info
+
 # Compose arguments
 composition=$(\
     for i in $(seq 0 $((${#types[@]} - 1)))
@@ -117,6 +119,8 @@ export R_COMPILE_PKG=1
 export R_DISABLE_BYTECODE=0
 export R_ENABLE_JIT=3
 export R_KEEP_PKG_SOURCE=no
+
+echo starting
 
 # Run function in parallel
 parallel -j${N_PROCESSES} --link run_item ::: $composition 
