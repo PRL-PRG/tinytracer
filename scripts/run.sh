@@ -16,6 +16,9 @@ eval set -- "$TEMP"
 # Constants (possibly overriden by arguments).
 CMD="/home/$USER/Workspace/tinytracer/bin/Rscript"
 WORKING_DIR='/tmp/vignettes'
+START_TIME=`date +%y-%m-%d_%H-%M`
+RESULTS_DIR="$WORKING_DIR/_results/$START_TIME"
+LOGS_DIR="$WORKING_DIR/_logs/$START_TIME"
 N_PROCESSES=1
 
 # Set up option variables using options passed via arguments.
@@ -32,33 +35,46 @@ done
 
 # Function for running vignettes etc. It takes one argument with 5 fields
 # delimited by @:
-function run_item {   
-    # process arguments
+function run_item {  
+    echo ::: starting run item
     eval `split @ arg "$1"`
+
+    echo ::: processing arguments 
+    # process arguments
     local type=${arg[0]}     #1 type of item (vignette, test, or example)
     local package=${arg[1]}  #2 package
     local item=${arg[2]}     #3 name of item
     local runnable=${arg[3]} #4 path to executable
     local wd=${arg[4]}       #5 working directory
 
+    echo ::: making local variables
     # some shorthand stuff
-    local log_file="$wd/$type_$package_$item.log"
-    local comp_file="$wd/comp_$type_$package_$item.csv"
+    local log_dir="$LOGS_DIR/composition"
+    local log_file="$log_dir/$type_$package_$item.log"
+    local comp_dir="$RESULTS_DIR/composition"
+    local comp_file="$comp_dir/$type_$package_$item.csv"
 
+    echo ::: preparing paths
     # prepare paths
     cd "$wd" 
+    mkdir -p $log_dir
+    mkdir -p $comp_dir
 
+    echo ::: running script
     # run script
     if [ "$runnable" = NA ]
     then    
     	echo Nothing to run for \"$item\",a $type from package $package
     else 
         echo Executing \"$item\", a $type from package $package
+        echo Runnable at "$runnable"
         echo Saving composition data to "$comp_file"
         SEXP_INSPECTOR_COMPOSITION="$comp_file" \
             "$CMD" "$runnable" 2 >& 1 | tee "$log_file"
         echo Done executing \"$item\", a $type from package $package
     fi
+
+    return 0
 }
 
 # Composition of arguments into a string delimited by a custom characteri, aka
@@ -88,11 +104,15 @@ function split { #eval result
 
 # We export variables and functions so that they are visible in subprocesses.
 export CMD
+export LOGS_DIR
+export RESULTS_DIR
 export -f run_item
 export -f join
 export -f split
 
 # Body ########################################################################
+
+echo retrieving data from "$WORKING_DIR/info.csv"
 
 # Data from the info file split into specific columns.
 types=($(csvtool -t ',' namedcol type "$WORKING_DIR/info.csv" | tail -n +2)) # parens make an array
@@ -122,5 +142,9 @@ export R_KEEP_PKG_SOURCE=no
 
 echo starting
 
+echo $composition | tr \  "\n"
+
 # Run function in parallel
-parallel -j${N_PROCESSES} --link run_item ::: $composition 
+parallel --verbose --gnu --keep-order -j${N_PROCESSES} --link run_item ::: $composition
+
+echo done with everything

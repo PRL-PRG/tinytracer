@@ -1,5 +1,6 @@
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -245,9 +246,9 @@ void print_composition(FILE *file, trie_value_t values[], int levels, int payloa
         case SEXP_TRIPLE:
             fprintf(file, "%s,%s,%s,%s,%i\n",
                     trie_value_to_string(type),
-                    trie_value_to_string(values[2]),
+                    trie_value_to_string(values[3]),// TAG 1 -> 2, CDR 2 -> 3, CAR 3 -> 1
                     trie_value_to_string(values[1]),
-                    trie_value_to_string(values[3]),
+                    trie_value_to_string(values[2]),
                     payload);
             break;
 
@@ -306,6 +307,10 @@ void register_stragglers() {
 void write_out_data() {
     trie_value_t values[4];
     FILE *file = fopen(composition_path, "w");
+    if (file == NULL) {
+        perror(NULL);
+        exit(1);
+    }
     fprintf(file, "type,car_type,tag_type,cdr_type,count\n");
     recursive_traverse(file, print_composition, composition, values, 0);
     fclose(file);
@@ -320,9 +325,6 @@ void sexp_inspector_composition_close() {
 }
 
 trie_value_t  sexp_to_trie_value(SEXP sexp){
-    //trie_value_t r = (sexp == NULL) ? -1 : TYPEOF(sexp);
-    //if (r > 25)
-        //printf("##### %d\n", r);
     return (sexp == NULL) ? -1 : TYPEOF(sexp);
 }
 
@@ -338,7 +340,7 @@ void sexp_inspector_composition_register(SEXP sexp) {
             break;
 
         case SEXP_TRIPLE:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp),
+            increment((trie_value_t[]){sexp_to_trie_value(sexp), // TAG 1 -> 2, CDR 2 -> 3, CAR 3 -> 1
                                        sexp_to_trie_value(TAG(sexp)),
                                        sexp_to_trie_value(CDR(sexp)),
                                        sexp_to_trie_value(CAR(sexp))}, 4);
