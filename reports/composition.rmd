@@ -1,0 +1,390 @@
+---
+title: "Composition report"
+author: "K. Siek"
+date: "October 5, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+options(dplyr.print_max = 1e9)
+
+get_data <- function(path) {
+  all_files <- list.files(path=path, recursive=TRUE, full.names = TRUE)  
+  all_files <- all_files[grepl(".*.csv$", all_files)]
+  data <- lapply(all_files, function(path) {
+    write(paste0("reading ", path), stderr())
+    tryCatch(cbind(input=path, read.csv(path)), error=function(e) NULL)
+  })
+  data[!sapply(data, is.null)]
+}
+  
+concatenate_data <- function(data) do.call(rbind, data)
+
+cut_decimals <- function(x, decimal_points=2) floor(x * (10^decimal_points)) / (10^decimal_points)
+
+format_large_ints <- function(x)
+  ifelse(is.na(x), 
+         "NA", 
+         ifelse(x < (10^3), 
+                paste0(cut_decimals(x)), 
+                ifelse(x < (10^6), 
+                       paste0(cut_decimals(x/(10^3)), "K"), 
+                       ifelse(x < (10^9), 
+                              paste0(cut_decimals(x/(10^6)), "M"),
+                              paste0(cut_decimals(x/(10^9)), "B")))))
+
+format_percents <- function(x) 
+  ifelse(x == 0, "0", 
+         ifelse(x < 0.01, "<1%",
+                paste0(cut_decimals(x), "%")))
+
+format_align <- function(x) paste0(strrep(" ", max(nchar(x)) - nchar(x)), x)
+
+format_log_buckets <- function(n) 
+  ifelse(n==0 | n==1, 
+         as.character(n), 
+         paste0(format_large_ints(2^(n-1)), "-", format_large_ints(2^n - 1)))
+
+```
+
+```{r read-data}
+data <- get_data("/tmp/vignettes/_results/18-10-11_17-06/composition/")
+data <- concatenate_data(data)
+data <- data %>%
+  mutate(count=as.numeric(count)) %>%
+  group_by(type, car_type, tag_type, cdr_type) %>% 
+  summarize(count=sum(count)) %>%
+  ungroup() %>%
+  mutate(type=as.character(type), 
+         car_type=as.character(car_type), 
+         tag_type=as.character(tag_type), 
+         cdr_type=as.character(cdr_type))
+```
+
+# Summary of types
+
+```{r show-all}
+print((function() {
+  data %>% 
+    group_by(type) %>% 
+    summarize(count=sum(count, na.rm=T)) %>% 
+    arrange(desc(count)) %>%
+    ungroup() %>% 
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count))
+})())
+```
+
+# Lists
+
+```{r show-listsxp}
+print((function() {
+  data %>% 
+    filter(type == "LISTSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# Promises
+
+```{r show-promsxp}
+print((function() {
+  data %>% 
+    rename(value_type=car_type, expr_type=cdr_type, env_type=tag_type) %>%
+    filter(type == "PROMSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# Environments
+
+```{r show-envsxp}
+print((function() {
+  data %>% 
+    rename(frame_type=car_type, enclos_type=cdr_type, hashtab_type=tag_type) %>%
+    filter(type == "ENVSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# Integer vectors
+
+```{r show-intsxp}
+print((function() {
+  data %>% 
+    filter(type == "INTSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(length=format_log_buckets(as.numeric(car_type)), 
+           true_length=format_log_buckets(as.numeric(tag_type))) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, length, true_length, count, percent)
+})())
+```
+
+# Logical vectors
+
+```{r show-lglsxp}
+print((function() {
+  data %>% 
+    filter(type == "LGLSXP") %>% 
+    arrange(desc(count)) %>%
+    mutate(length=format_log_buckets(as.numeric(car_type)), 
+           true_length=format_log_buckets(as.numeric(tag_type))) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, length, true_length, count, percent)
+})())
+```
+
+# Generic vectors
+
+```{r show-vecsxp}
+print((function() {
+  data %>% 
+    filter(type == "VECSXP") %>% 
+    arrange(desc(count)) %>%
+    mutate(length=format_log_buckets(as.numeric(car_type)), 
+           true_length=format_log_buckets(as.numeric(tag_type))) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, length, true_length, count, percent)
+})())
+```
+
+# Language vectors
+
+```{r show-langsxp}
+print((function() {
+  data %>% 
+    #rename(frame_type=car_type, enclos_type=tag_type, hashtab_type=cdr_type) %>%
+    filter(type == "LANGSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# Dot-dot-dot
+
+```{r show-dotsxp}
+print((function() {
+  data %>% 
+    #rename(frame_type=car_type, enclos_type=tag_type, hashtab_type=cdr_type) %>%
+    filter(type == "DOTSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# Raw vectors
+
+```{r show-rawsxp}
+print((function() {
+  data %>% 
+    filter(type == "RAWSXP") %>% 
+    arrange(desc(count)) %>%
+    mutate(length=format_log_buckets(as.numeric(car_type)), 
+           true_length=format_log_buckets(as.numeric(tag_type))) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, length, true_length, count, percent)
+})())
+```
+
+# Closures
+
+```{r show-closxp}
+print((function() {
+  data %>% 
+    rename(formals_type=car_type, body_type=cdr_type, env_type=tag_type) %>%
+    filter(type == "CLOSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# Character vectors
+
+```{r show-charsxp}
+print((function() {
+  data %>% 
+    filter(type == "CHARSXP") %>% 
+    arrange(desc(count)) %>%
+    mutate(length=format_log_buckets(as.numeric(car_type)), 
+           true_length=format_log_buckets(as.numeric(tag_type))) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, length, true_length, count, percent)
+})())
+```
+
+# Numeric vectors
+
+```{r show-realsxp}
+print((function() {
+  data %>% 
+    filter(type == "REALSXP") %>% 
+    arrange(desc(count)) %>%
+    mutate(length=format_log_buckets(as.numeric(car_type)), 
+           true_length=format_log_buckets(as.numeric(tag_type))) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, length, true_length, count, percent)
+})())
+```
+
+# Byte-code
+
+```{r show-bcodesxp}
+print((function() {
+  data %>% 
+    rename(code_type=car_type, consts_type=cdr_type, expr_type=tag_type) %>%
+    filter(type == "BCODESXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# Symbols
+
+```{r show-symsxp}
+print((function() {
+  data %>% 
+    rename(pname_type=car_type, value_type=cdr_type, internal_type=tag_type) %>%
+    filter(type == "SYMSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# External pointers
+
+```{r show-extptrsxp}
+print((function() {
+  data %>% 
+    rename(ptr_type=car_type, tag_type=tag_type, prot_type=cdr_type) %>%
+    filter(type == "EXTPTRSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# Weak references
+
+```{r show-weakrefsxp}
+print((function() {
+  data %>% 
+    rename(key_type=car_type, value_type=tag_type, finalizer_type=cdr_type) %>%
+    filter(type == "WEAKREFSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%")
+})())
+```
+
+# Built-ins 
+
+```{r show-builtinsxp}
+print((function() {
+  data %>% 
+    rename(offset=car_type) %>%
+    filter(type == "BUILTINSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, offset, count, percent)
+})())
+```
+
+# Expression vector
+
+```{r show-exprsxp}
+print((function() {
+  data %>% 
+    filter(type == "EXPRSXP") %>% 
+    arrange(desc(count)) %>%
+    mutate(length=format_log_buckets(as.numeric(car_type)), 
+           true_length=format_log_buckets(as.numeric(tag_type))) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, length, true_length, count, percent)
+})())
+```
+
+# Complex vector
+
+```{r show-cplxsxp}
+print((function() {
+  data %>% 
+    filter(type == "CPLXSXP") %>% 
+    arrange(desc(count)) %>%
+    mutate(length=format_log_buckets(as.numeric(car_type)), 
+           true_length=format_log_buckets(as.numeric(tag_type))) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, length, true_length, count, percent)
+})())
+```
+
+# Specials
+
+```{r show-specialsxp}
+print((function() {
+  data %>% 
+    rename(offset=car_type) %>%
+    filter(type == "SPECIALSXP") %>% 
+    #select(-type) %>%
+    arrange(desc(count)) %>%
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) %>%
+    filter(percent != "<1%") %>%
+    select(type, offset, count, percent)
+})())
+```
+
+# S4 objects
