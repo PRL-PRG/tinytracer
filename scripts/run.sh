@@ -50,15 +50,15 @@ function run_item {
     echo ::: making local variables
     # some shorthand stuff
     local log_dir="$LOGS_DIR/composition"
-    local log_file="$log_dir/$type_$package_$item.log"
+    local log_file="$log_dir/${type}_${package}_${item}.log"
     local comp_dir="$RESULTS_DIR/composition"
-    local comp_file="$comp_dir/$type_$package_$item.csv"
+    local comp_file="$comp_dir/${type}_${package}_${item}.csv"
 
     echo ::: preparing paths
     # prepare paths
     cd "$wd" 
-    mkdir -p $log_dir
-    mkdir -p $comp_dir
+    mkdir -p "$log_dir"
+    mkdir -p "$comp_dir"
 
     echo ::: running script
     # run script
@@ -77,7 +77,7 @@ function run_item {
     return 0
 }
 
-# Composition of arguments into a string delimited by a custom characteri, aka
+# Composition of arguments into a string delimited by a custom character, aka
 # "join." Takes at least two arguments: 
 #   $1:      separator
 #   $2-...:  arguments to be joined
