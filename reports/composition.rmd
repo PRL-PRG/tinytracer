@@ -23,19 +23,93 @@ pretty_print_data <- function(data)
     lemon_print(data, options=c())
   }
 
-get_data <- function(path) {
-  all_files <- list.files(path=path, recursive=TRUE, full.names = TRUE)  
-  all_files <- all_files[grepl(".*.csv$", all_files)]
-  data <- lapply(all_files, function(path) {
-    write(paste0("reading ", path), stderr())
-    tryCatch(cbind(input=path, read.csv(path)), error=function(e) NULL)
-  })
-  data[!sapply(data, is.null)]
+# get_data <- function(path) {
+#   all_files <- list.files(path=path, recursive=TRUE, full.names = TRUE) 
+#   all_files <- all_files[grepl(".*.csv$", all_files)]
+#   data <- lapply(all_files, function(path) {
+#     write(paste0("reading ", path), stderr())
+#     tryCatch(cbind(input=path, read.csv(path)), error=function(e) NULL)
+#   })
+#   data[!sapply(data, is.null)]
+# }
+# 
+# # slower, but works for everything
+# get_data_ <- function(path) {
+#   collected_data <- NULL
+#   
+#   all_files <- list.files(path=path, recursive=TRUE, full.names = TRUE)
+#   all_files <- all_files[grepl(".*.csv$", all_files)]
+#   
+#   for(file in all_files) {
+#     write(paste0("reading ", file), stderr())
+#     
+#     try({
+#       csv_data <- read.csv(file)
+#       csv_data$path <- path
+#       if (is.null(csv_data)) 
+#         collected_data <- csv_data
+#       else 
+#         collected_data <- rbind(collected_data, csv_data)
+#     })
+#   }
+# 
+#   collected_data
+# }
+
+get_all_files <- function(path) {
+  all_files <- list.files(path=path, recursive=T, full.names=T)
+  all_files[grepl(".*.csv$", all_files)]
+}
+
+get_metadata <- function(path) {
+  all_files <- get_all_files(path)
+  
+  all_metadata <- strsplit(
+    basename(tools:::file_path_sans_ext(all_files)), 
+    split="_", fixed=T)
+  
+  packages <- unique(lapply(all_metadata, `[[`, 2))
+  vignettes <- unique(lapply(all_metadata, `[[`, 3))
+  
+  data.frame(
+    dataset=paste0(basename(dirname(path)), "/", basename(path)),
+    packages=length(packages), 
+    vignettes=length(vignettes))
+}
+
+get_data_and_merge <- function(path) {
+  collected_data <- NULL
+  all_files <- get_all_files(path)
+  
+  for(file in all_files) {
+    write(paste0("reading ", file), stderr())
+    
+    try({
+      csv_data <- read.csv(file)
+      if (is.null(csv_data)) 
+        collected_data <- csv_data
+      else 
+        collected_data <- 
+          rbind(collected_data, csv_data) %>% 
+          mutate(count=as.numeric(count)) %>%
+          group_by(type, car_type, tag_type, cdr_type) %>% 
+          summarize(count=sum(count)) %>%
+          ungroup()
+    })
+  }
+
+  collected_data %>% 
+    mutate(type=as.character(type), 
+    car_type=as.character(car_type), 
+    cdr_type=as.character(cdr_type),
+    tag_type=as.character(tag_type)) %>%
+    rename(car=car_type, cdr=cdr_type, tag=tag_type)
 }
   
 concatenate_data <- function(data) do.call(rbind, data)
 
-cut_decimals <- function(x, decimal_points=2) floor(x * (10^decimal_points)) / (10^decimal_points)
+cut_decimals <- function(x, decimal_points=2) 
+  floor(x * (10^decimal_points)) / (10^decimal_points)
 
 format_large_ints <- function(x)
   ifelse(is.na(x), 
@@ -73,48 +147,49 @@ filter_and_format_vectors <- function(data, type)
     data %>% 
     filter(type == !!type) %>% 
     arrange(desc(count)) %>%
-    mutate(length=format_log_buckets(as.numeric(car_type)), 
-           true_length=format_log_buckets(as.numeric(tag_type))) %>%
+    mutate(length=format_log_buckets(as.numeric(car)), 
+           true_length=format_log_buckets(as.numeric(tag))) %>%
     mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
     mutate(count=format_large_ints(count)) %>%
     filter(percent != "<1%") %>%
     select(type, length, true_length, count, percent) %>%
     select(-type) 
 
+filter_and_format_summary <- function(data) 
+    data %>% 
+    group_by(type) %>% 
+    summarize(count=sum(count, na.rm=T)) %>% 
+    arrange(desc(count)) %>%
+    ungroup() %>% 
+    mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
+    mutate(count=format_large_ints(count)) 
+
 ```
 
 ```{r read-data, comment="", echo=F}
-data <- get_data("/tmp/vignettes/_results/18-10-11_17-06/composition/")
-data <- concatenate_data(data)
-data <- data %>%
-  mutate(count=as.numeric(count)) %>%
-  group_by(type, car_type, tag_type, cdr_type) %>% 
-  summarize(count=sum(count)) %>%
-  ungroup() %>%
-  mutate(type=as.character(type), 
-         car_type=as.character(car_type), 
-         tag_type=as.character(tag_type), 
-         cdr_type=as.character(cdr_type))
+path <- "/tmp/vignettes/_results/18-10-12_15-08/composition/"
+metadata <- get_metadata(path)
+data <- get_data_and_merge(path)
+```
+
+# Metadata
+
+```{r show-metadata, comment="", echo=F}
+metadata %>%
+  pretty_print_data
 ```
 
 # Summary of types
 
 ```{r show-all, comment="", echo=F}
-data %>% 
-  group_by(type) %>% 
-  summarize(count=sum(count, na.rm=T)) %>% 
-  arrange(desc(count)) %>%
-  ungroup() %>% 
-  mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
-  mutate(count=format_large_ints(count)) %>%
-  pretty_print_data
+filter_and_format_summary(data) %>%
+  pretty_print_data 
 ```
 
 # Lists
 
 ```{r show-listsxp, comment="", echo=F}
 filter_and_format_triples(data, "LISTSXP") %>%
-  rename(car=car_type, cdr=cdr_type, tag=tag_type) %>%
   pretty_print_data
 ```
 
@@ -122,7 +197,7 @@ filter_and_format_triples(data, "LISTSXP") %>%
 
 ```{r show-promsxp, comment="", echo=F}
 filter_and_format_triples(data, "PROMSXP") %>%
-  rename(value=car_type, expr=cdr_type, env=tag_type) %>%
+  rename(value=car, expr=cdr, env=tag) %>%
   pretty_print_data
 ```
 
@@ -130,7 +205,7 @@ filter_and_format_triples(data, "PROMSXP") %>%
 
 ```{r show-envsxp, comment="", echo=F}
 filter_and_format_triples(data, "ENVSXP") %>%
-  rename(frame=car_type, enclos=cdr_type, hashtab=tag_type) %>%
+  rename(frame=car, enclos=cdr, hashtab=tag) %>%
   pretty_print_data
 ```
 
@@ -180,7 +255,7 @@ filter_and_format_vectors(data, "RAWSXP") %>%
 
 ```{r show-closxp, comment="", echo=F}
 filter_and_format_triples(data, "CLOSXP") %>%
-  rename(formals=car_type, body=cdr_type, env=tag_type) %>%
+  rename(formals=car, body=cdr, env=tag) %>%
   pretty_print_data
 ```
 
@@ -202,7 +277,7 @@ filter_and_format_vectors(data, "REALSXP") %>%
 
 ```{r show-bcodesxp, comment="", echo=F}
 filter_and_format_triples(data, "BCODESXP") %>%
-  rename(code=car_type, consts=cdr_type, expr=tag_type) %>%
+  rename(code=car, consts=cdr, expr=tag) %>%
   pretty_print_data
 ```
 
@@ -210,7 +285,7 @@ filter_and_format_triples(data, "BCODESXP") %>%
 
 ```{r show-symsxp, comment="", echo=F}
 filter_and_format_triples(data, "SYMSXP") %>%
-  rename(pname=car_type, value=cdr_type, internal=tag_type) %>%
+  rename(pname=car, value=cdr, internal=tag) %>%
   pretty_print_data
 ```
 
@@ -218,7 +293,7 @@ filter_and_format_triples(data, "SYMSXP") %>%
 
 ```{r show-extptrsxp, comment="", echo=F}
 filter_and_format_triples(data, "EXTPTRSXP") %>%
-  rename(ptr=car_type, tag=tag_type, prot=cdr_type) %>%
+  rename(ptr=car, tag=tag, prot=cdr) %>%
   pretty_print_data
 ```
 
@@ -226,7 +301,7 @@ filter_and_format_triples(data, "EXTPTRSXP") %>%
 
 ```{r show-weakrefsxp, comment="", echo=F}
 filter_and_format_triples(data, "WEAKREFSXP") %>%
-  rename(key=car_type, value=tag_type, finalizer=cdr_type) %>%
+  rename(key=car, value=tag, finalizer=cdr) %>%
   pretty_print_data
 ```
 
@@ -234,7 +309,7 @@ filter_and_format_triples(data, "WEAKREFSXP") %>%
 
 ```{r show-builtinsxp, comment="", echo=F}
 filter_and_format_triples(data, "BUILTINSXP") %>%
-  rename(offset=car_type) %>%
+  rename(offset=car) %>%
   select(offset, count, percent) %>%
   pretty_print_data
 ```
@@ -257,7 +332,7 @@ filter_and_format_vectors(data, "CPLXSXP") %>%
 
 ```{r show-specialsxp, comment="", echo=F}
 filter_and_format_triples(data, "SPECIALSXP") %>%
-  rename(offset=car_type) %>%
+  rename(offset=car) %>%
   select(offset, count, percent) %>%
   pretty_print_data
 ```
