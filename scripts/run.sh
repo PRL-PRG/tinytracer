@@ -20,6 +20,7 @@ START_TIME=`date +%y-%m-%d_%H-%M`
 RESULTS_DIR="$WORKING_DIR/_results/$START_TIME"
 LOGS_DIR="$WORKING_DIR/_logs/$START_TIME"
 N_PROCESSES=1
+PROGRESS_LOG="$LOGS_DIR/.progress"
 
 # Set up option variables using options passed via arguments.
 while true
@@ -65,6 +66,7 @@ function run_item {
     if [ "$runnable" = NA ]
     then    
     	echo Nothing to run for \"$item\",a $type from package $package
+        echo -n "o" >> $PROGRESS_LOG
     else 
         echo Executing \"$item\", a $type from package $package
         echo Runnable at "$runnable"
@@ -72,6 +74,7 @@ function run_item {
         SEXP_INSPECTOR_COMPOSITION="$comp_file" \
             "$CMD" "$runnable" 2 >& 1 | tee "$log_file"
         echo Done executing \"$item\", a $type from package $package
+        echo -n "x" >> "$PROGRESS_LOG"
     fi
 
     return 0
@@ -106,6 +109,7 @@ function split { #eval result
 export CMD
 export LOGS_DIR
 export RESULTS_DIR
+export PROGRESS_LOG
 export -f run_item
 export -f join
 export -f split
@@ -142,7 +146,12 @@ export R_KEEP_PKG_SOURCE=no
 
 echo starting
 
-echo $composition | tr \  "\n"
+echo results at $RESULTS_DIR
+echo logs at $LOGS_DIR
+
+
+mkdir -p `dirname "$PROGRESS_LOG"`
+echo $composition | wc -w > "$PROGRESS_LOG"
 
 # Run function in parallel
 parallel --verbose --gnu --keep-order -j${N_PROCESSES} --link run_item ::: $composition
