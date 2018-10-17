@@ -5,7 +5,7 @@
 # Preamble: option processing #################################################
 
 # Set up option parsing with short and long options via getopt.
-TEMP=$(getopt -o w:p: --long working-dir:processes: -- "$@")
+TEMP=$(getopt -o w:p:c: --long working-dir:processes:compiler:cmd: -- "$@")
 
 # Check if parsing worked.
 [ $? != 0 ] && echo "Option parsing failed." >&2 && exit 1
@@ -29,6 +29,7 @@ do
         -w|--working-dir) WORKING_DIR=$2; shift 2        ;;
         -p|--processes)   N_PROCESSES=$2; shift 2        ;;
         -c|--cmd)         CMD=$2;         shift 2        ;;
+        --compiler)       COMPILER=$2;    shift 2        ;;
         --)                               shift;    break;;
         *)                                          break;;
     esac
@@ -139,10 +140,21 @@ composition=$(\
 
 # R environmental variables
 export R_LIBS=/home/kondziu/R/installed/tinytracer/
-export R_COMPILE_PKG=1
-export R_DISABLE_BYTECODE=0
-export R_ENABLE_JIT=3
 export R_KEEP_PKG_SOURCE=no
+
+if [ $COMPILER = 'jit' ];
+then
+    export R_COMPILE_PKG=1
+    export R_DISABLE_BYTECODE=0
+    export R_ENABLE_JIT=3
+elif [ $COMPILER = 'disabled' ]
+    export R_COMPILE_PKG=0
+    export R_DISABLE_BYTECODE=1
+    export R_ENABLE_JIT=0
+else 
+    echo "Unknown compiler setting: $COMPILER"
+    exit 2
+fi
 
 echo starting
 
