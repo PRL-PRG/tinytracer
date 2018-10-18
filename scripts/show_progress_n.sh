@@ -32,7 +32,7 @@ do
         empty[$i]=`tail -n +2 "$file" | tr -cd o | wc -m`
 
         sum=$((${completed[$i]}+${empty[$i]}))
-        echo -e "$(basename ${working_dirs[$i]})  \tcompleted $sum/${total[$i]} ($(($sum/${total[$i]}*100))%) including ${empty[$i]} empty"
+        echo -e "$(basename ${working_dirs[$i]})  \tcompleted $sum/${total[$i]} ($(((100*$sum)/${total[$i]}))%) including ${empty[$i]} empty"
     done
 
     sleep 5s
