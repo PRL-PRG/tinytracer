@@ -5,7 +5,7 @@
 # Preamble: option processing #################################################
 
 # Set up option parsing with short and long options via getopt.
-TEMP=$(getopt -o w:p:c: --long working-dir:processes:compiler:cmd: -- "$@")
+TEMP=$(getopt -o w:p:c: --long working-dir:,processes:,compiler:,cmd: -- "$@")
 
 # Check if parsing worked.
 [ $? != 0 ] && echo "Option parsing failed." >&2 && exit 1
@@ -20,7 +20,7 @@ START_TIME=`date +%y-%m-%d_%H-%M`
 RESULTS_DIR="$WORKING_DIR/_results/$START_TIME"
 LOGS_DIR="$WORKING_DIR/_logs/$START_TIME"
 N_PROCESSES=1
-PROGRESS_LOG="$LOGS_DIR/.progress"
+COMPILER=jit
 
 # Set up option variables using options passed via arguments.
 while true
@@ -51,10 +51,10 @@ function run_item {
 
     echo ::: making local variables
     # some shorthand stuff
-    local log_dir="$LOGS_DIR/composition"
+    local log_dir="$LOGS_DIR/composition/$COMPILER/"
     local log_file="$log_dir/${type}_${package}_${item}.log"
-    local comp_dir="$RESULTS_DIR/composition"
-    local comp_file="$comp_dir/${type}_${package}_${item}.csv"
+    local comp_dir="$RESULTS_DIR/composition/$COMPILER/"
+    local comp_file="$comp_dir/${type}_${package}_${item}_%d.csv"
 
     echo ::: preparing paths
     # prepare paths
@@ -111,6 +111,7 @@ export CMD
 export LOGS_DIR
 export RESULTS_DIR
 export PROGRESS_LOG
+export COMPILER
 export -f run_item
 export -f join
 export -f split
@@ -139,7 +140,7 @@ composition=$(\
 )
 
 # R environmental variables
-export R_LIBS=/home/kondziu/R/installed/tinytracer/
+export R_LIBS=/home/kondziu/tinytracer/R_LIBS
 export R_KEEP_PKG_SOURCE=no
 
 if [ $COMPILER = 'jit' ];
@@ -147,7 +148,8 @@ then
     export R_COMPILE_PKG=1
     export R_DISABLE_BYTECODE=0
     export R_ENABLE_JIT=3
-elif [ $COMPILER = 'disabled' ]
+elif [ $COMPILER = 'disable_bytecode' ]
+then
     export R_COMPILE_PKG=0
     export R_DISABLE_BYTECODE=1
     export R_ENABLE_JIT=0
@@ -161,7 +163,7 @@ echo starting
 echo results at $RESULTS_DIR
 echo logs at $LOGS_DIR
 
-
+export PROGRESS_LOG="$LOGS_DIR/.progress"
 mkdir -p `dirname "$PROGRESS_LOG"`
 echo $composition | wc -w > "$PROGRESS_LOG"
 
