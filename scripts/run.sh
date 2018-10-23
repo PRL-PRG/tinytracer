@@ -5,7 +5,7 @@
 # Preamble: option processing #################################################
 
 # Set up option parsing with short and long options via getopt.
-TEMP=$(getopt -o w:p:c: --long working-dir:,processes:,compiler:,cmd: -- "$@")
+TEMP=$(getopt -o w:p:c:L:R: --long working-dir:,processes:,compiler:,cmd:,start-from:,end-at:,logs-dir:,results-dir: -- "$@")
 
 # Check if parsing worked.
 [ $? != 0 ] && echo "Option parsing failed." >&2 && exit 1
@@ -16,20 +16,26 @@ eval set -- "$TEMP"
 # Constants (possibly overriden by arguments).
 CMD="/home/$USER/Workspace/tinytracer/bin/Rscript"
 WORKING_DIR='/tmp/vignettes'
-START_TIME=`date +%y-%m-%d_%H-%M`
+START_TIME=`date +%y-%m-%d`
 RESULTS_DIR="$WORKING_DIR/_results/$START_TIME"
 LOGS_DIR="$WORKING_DIR/_logs/$START_TIME"
 N_PROCESSES=1
 COMPILER=jit
+START_FROM=0
+END_AT=0
 
 # Set up option variables using options passed via arguments.
 while true
 do
     case "$1" in
         -w|--working-dir) WORKING_DIR=$2; shift 2        ;;
+        -R|--results-dir) RESULTS_DIR=$2; shift 2        ;;
+        -L|--logs-dir)    LOGS_DIR=$2;    shift 2        ;;
         -p|--processes)   N_PROCESSES=$2; shift 2        ;;
         -c|--cmd)         CMD=$2;         shift 2        ;;
         --compiler)       COMPILER=$2;    shift 2        ;;
+        --start-from)     START_FROM=$2;  shift 2        ;;
+        --end-at)         END_AT=$2;      shift 2        ;;
         --)                               shift;    break;;
         *)                                          break;;
     esac
@@ -43,11 +49,11 @@ function run_item {
 
     echo ::: processing arguments 
     # process arguments
-    local type=${arg[0]}     #1 type of item (vignette, test, or example)
-    local package=${arg[1]}  #2 package
-    local item=${arg[2]}     #3 name of item
-    local runnable=${arg[3]} #4 path to executable
-    local wd=${arg[4]}       #5 working directory
+    local type=${arg[1]}     #1 type of item (vignette, test, or example)
+    local package=${arg[2]}  #2 package
+    local item=${arg[3]}     #3 name of item
+    local runnable=${arg[4]} #4 path to executable
+    local wd=${arg[5]}       #5 working directory
 
     echo ::: making local variables
     # some shorthand stuff
@@ -127,29 +133,47 @@ items=($(csvtool -t ',' namedcol item "$WORKING_DIR/info.csv" | tail -n +2))
 wds=($(csvtool -t ',' namedcol working_directory "$WORKING_DIR/info.csv" | tail -n +2))
 runnables=($(csvtool -t ',' namedcol instrumented_source_file "$WORKING_DIR/info.csv" | tail -n +2))
 
-echo composing parameter info
+echo retrieved ${#types[@]} rows
 
 # Compose arguments
+echo composing parameter info
 composition=$(\
     for i in $(seq 0 $((${#types[@]} - 1)))
     do 
-        echo `join @ \
+        echo `join @ $i \
             "${types[i]}" "${packages[i]}" "${items[i]}" \
             "${runnables[i]}" "${wds[i]}"`
     done
 )
 
+if (( $START_FROM != 0 ))
+then
+    echo trimming composition to start from $START_FROM
+    composition=`echo $composition | tr ' ' "\n" | tail -n +$(($START_FROM + 1))`
+fi
+
+if (( $END_AT != 0 ))
+then
+    echo trimming composition to end at $END_AT
+    composition=`echo $composition | tr ' ' "\n" | head -n +$(($END_AT - $START_FROM + 1))`
+fi
+
+echo $composition
+
 # R environmental variables
-export R_LIBS=/home/kondziu/tinytracer/R_LIBS
+echo setting R environmental variables
+
 export R_KEEP_PKG_SOURCE=no
 
 if [ $COMPILER = 'jit' ];
 then
+    export R_LIBS=/home/kondziu/tinytracer/R_LIBS
     export R_COMPILE_PKG=1
     export R_DISABLE_BYTECODE=0
     export R_ENABLE_JIT=3
 elif [ $COMPILER = 'disable_bytecode' ]
 then
+    export R_LIBS=/home/kondziu/tinytracer/R_LIBS
     export R_COMPILE_PKG=0
     export R_DISABLE_BYTECODE=1
     export R_ENABLE_JIT=0
@@ -158,12 +182,18 @@ else
     exit 2
 fi
 
+echo R_KEEP_PKG_SOURCE=$R_KEEP_PKG_SOURCE
+echo R_LIBS=$R_LIBS
+echo R_COMPILE_PKG=$R_COMPILE_PKG
+echo R_DISABLE_BYTECODE=$R_DISABLE_BYTECODE
+echo R_ENABLE_JIT=$R_ENABLE_JIT
+
 echo starting
 
 echo results at $RESULTS_DIR
 echo logs at $LOGS_DIR
 
-export PROGRESS_LOG="$LOGS_DIR/.progress"
+export PROGRESS_LOG="$LOGS_DIR/.progress_$$"
 mkdir -p `dirname "$PROGRESS_LOG"`
 echo $composition | wc -w > "$PROGRESS_LOG"
 
