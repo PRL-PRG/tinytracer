@@ -11,6 +11,7 @@ library(dplyr)
 library(lemon)
 #library(ascii)
 
+options(width=160)
 options(dplyr.print_max = 1e9)
 knit_print.data.frame <- lemon_print
 
@@ -72,7 +73,7 @@ get_metadata <- function(path) {
   vignettes <- unique(lapply(all_metadata, `[[`, 3))
   
   data.frame(
-    dataset=paste0(basename(dirname(path)), "/", basename(path)),
+    dataset=path, #paste0(basename(dirname(path)), "/", basename(path)),
     packages=length(packages), 
     vignettes=length(vignettes))
 }
@@ -162,12 +163,13 @@ filter_and_format_summary <- function(data)
     arrange(desc(count)) %>%
     ungroup() %>% 
     mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
-    mutate(count=format_large_ints(count)) 
+    mutate(count=format_large_ints(count))
 
 ```
 
 ```{r read-data, comment="", echo=F}
-path <- "/tmp/vignettes/_results/18-10-12_15-08/composition/"
+#path <- "/tmp/vignettes/_results/18-10-12_15-08/composition/"
+path <- "~/Workspace/tinytracer/results/18-10-18_15-15/composition/disable_bytecode/"
 metadata <- get_metadata(path)
 data <- get_data_and_merge(path)
 ```

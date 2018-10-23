@@ -1,7 +1,7 @@
 ---
-title: "Composition report"
+title: "Composition report (jit/nojit comparison)"
 author: "K. Siek"
-date: "October 5, 2018"
+date: "October 18, 2018"
 output: html_document
 ---
 
@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(lemon)
+library(stringr)
 #library(ascii)
 
 options(width=160)
@@ -24,45 +25,12 @@ pretty_print_data <- function(data)
     lemon_print(data, options=c())
   }
 
-# get_data <- function(path) {
-#   all_files <- list.files(path=path, recursive=TRUE, full.names = TRUE) 
-#   all_files <- all_files[grepl(".*.csv$", all_files)]
-#   data <- lapply(all_files, function(path) {
-#     write(paste0("reading ", path), stderr())
-#     tryCatch(cbind(input=path, read.csv(path)), error=function(e) NULL)
-#   })
-#   data[!sapply(data, is.null)]
-# }
-# 
-# # slower, but works for everything
-# get_data_ <- function(path) {
-#   collected_data <- NULL
-#   
-#   all_files <- list.files(path=path, recursive=TRUE, full.names = TRUE)
-#   all_files <- all_files[grepl(".*.csv$", all_files)]
-#   
-#   for(file in all_files) {
-#     write(paste0("reading ", file), stderr())
-#     
-#     try({
-#       csv_data <- read.csv(file)
-#       csv_data$path <- path
-#       if (is.null(csv_data)) 
-#         collected_data <- csv_data
-#       else 
-#         collected_data <- rbind(collected_data, csv_data)
-#     })
-#   }
-# 
-#   collected_data
-# }
-
 get_all_files <- function(path) {
   all_files <- list.files(path=path, recursive=T, full.names=T)
   all_files[grepl(".*.csv$", all_files)]
 }
 
-get_metadata <- function(path) {
+get_metadata <- function(path, common_prefix="/home/kondziu/Workspace/tinytracer/results/") {
   all_files <- get_all_files(path)
   
   all_metadata <- strsplit(
@@ -73,7 +41,8 @@ get_metadata <- function(path) {
   vignettes <- unique(lapply(all_metadata, `[[`, 3))
   
   data.frame(
-    dataset=paste0(basename(dirname(path)), "/", basename(path)),
+    dataset=str_replace(path, common_prefix, ""),
+                        #paste0(basename(dirname(path)), "/", basename(path)),
     packages=length(packages), 
     vignettes=length(vignettes))
 }
@@ -168,20 +137,36 @@ filter_and_format_summary <- function(data)
 ```
 
 ```{r read-data, comment="", echo=F, cache=T}
-jit_path <- "/tmp/vignettes/_results/18-10-12_15-08/cropped_jit/"
+#jit_path <- "/home/vignettes/_results/18-10-12_15-08/cropped_jit/"
+#jit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-17_16-30/composition_jit/cropped/"
+jit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-18_16-08/composition/jit/cropped/"
 jit_metadata <- get_metadata(jit_path)
 jit_data <- get_data_and_merge(jit_path)
 
-nojit_path <- "/tmp/vignettes/_results/18-10-12_15-08/cropped_nojit/"
+#nojit_path <- "/tmp/vignettes/_results/18-10-12_15-08/cropped_nojit/"
+#nojit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-17_16-30/composition_nojit/cropped/"
+nojit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-18_16-08/composition/disable_bytecode/cropped/"
 nojit_metadata <- get_metadata(nojit_path)
 nojit_data <- get_data_and_merge(nojit_path)
 ```
 
 # Metadata
 
-```{r show-metadata, comment="", echo=F, cache=T}
+```{r show-metadata, comment="", echo=F}
 rbind(jit_metadata, nojit_metadata) %>%
   pretty_print_data
+```
+
+# Total SEXPs
+
+```{r show-total, comment="", echo=F}
+cbind(
+  jit_data %>% summarise(jit.count=sum(count)),
+  nojit_data %>% summarise(nojit.count=sum(count))
+) %>% mutate(
+  jit.count=format_large_ints(jit.count),
+  nojit.count=format_large_ints(nojit.count)
+) %>% pretty_print_data 
 ```
 
 # Summary of types
