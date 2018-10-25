@@ -72,7 +72,8 @@ struct trie *find_or_create_node_within_level(struct trie *level_root, trie_valu
             }
 }
 
-void recursive_traverse(FILE *file, void (*f)(FILE *file, trie_value_t[], int, int), struct trie *elem, trie_value_t values[], int levels) {
+void recursive_traverse(FILE *file, void (*f)(FILE *file, trie_value_t[], int, int),
+                        struct trie *elem, trie_value_t values[], int levels) {
     if(elem == NULL)
         return;
 
@@ -144,13 +145,25 @@ void sexp_inspector_composition_initialize() {
     }
 }
 
-char *indentify_symbol(trie_value_t v) {
+char *identify_environment(trie_value_t v) {
+    if (v == R_GlobalEnv)
+        return "ENVSXP[R_GlobalEnv]";
+    if (v == R_EmptyEnv)
+        return "ENVSXP[R_EmptyEnv]";
+    if (v == R_BaseEnv)
+        return "ENVSXP[R_BaseEnv]";
+    if (v == R_BaseNamespace)
+        return "ENVSXP[R_BaseNamespace]";
+    if (v == R_NamespaceRegistry)
+        return "ENVSXP[R_NamespaceRegistry]";
+    return "ENVSXP";
+}
+
+char *identify_symbol(trie_value_t v) {
     if (v == R_UnboundValue)
-        return "SYMSXP<R_UnboundValue>";
-
+        return "SYMSXP[R_UnboundValue]";
     if (v == R_MissingArg)
-        return "SYMSXP<R_UnboundValue>";
-
+        return "SYMSXP[R_MissingArg]";
     return "SYMSXP";
 }
 
@@ -158,6 +171,7 @@ char *trie_value_to_string(trie_value_t v) {
     switch(v) {
         case NILSXP:     return "NILSXP";     /* 0 */
         case SYMSXP:     return "SYMSXP";     /* 1 */
+        case -10:        return "SYMSXP[R_UnboundValue]";
         case LISTSXP:    return "LISTSXP";    /* 2 */
         case CLOSXP:     return "CLOSXP";     /* 3 */
         case ENVSXP:     return "ENVSXP";     /* 4 */
@@ -208,9 +222,7 @@ sexp_classification_t classify_sexp(SEXPTYPE type) {
         case S4SXP:/* TODO attrib analysis */
             return SEXP_S4;
 
-
-            //return SEXP_SYMSXP;
-
+        case -10:       /* SYMSXP[R_UnboundValue] */
         case SYMSXP:
         case LISTSXP:
         case CLOSXP:
@@ -233,9 +245,6 @@ sexp_classification_t classify_sexp(SEXPTYPE type) {
         case RAWSXP:
         case CHARSXP:
             return SEXP_VECTOR;
-
-
-        // return SEXP_CHARSXP;
 
         case EXTPTRSXP:
             return SEXP_EXTERNAL;
@@ -293,11 +302,12 @@ void print_composition(FILE *file, trie_value_t values[], int levels, int payloa
             break;
 
         case SEXP_VECTOR:
-            fprintf(file, "%s,%s,%i,%i,NA,%i\n",
+            fprintf(file, "%s,%s,%i,%i,%i,%i\n",
                     trie_value_to_string(type),
                     trie_value_to_string(values[1]),
-                    values[2],
                     values[3],
+                    values[4],
+                    values[2],                       // ALT bit
                     payload);
             break;
 
@@ -371,6 +381,8 @@ void sexp_inspector_composition_close() {
 trie_value_t  sexp_to_trie_value(SEXP sexp){
     if (sexp == NULL)
         return -1;
+    if (sexp == R_UnboundValue)
+        return -10;
     else
         return TYPEOF(sexp);
 }
@@ -384,6 +396,11 @@ void sexp_inspector_composition_register(SEXP sexp) {
     switch(classify_sexp(TYPEOF(sexp))) {
         case SEXP_EMPTY:
             increment((trie_value_t[]){sexp_to_trie_value(sexp)}, 1); // NIL cannot have attributes
+            break;
+
+        case SEXP_S4:
+            increment((trie_value_t[]){sexp_to_trie_value(sexp),
+                                       sexp_to_trie_value(ATTRIB(sexp))}, 2);
             break;
 
         case SEXP_TRIPLE:
@@ -405,8 +422,9 @@ void sexp_inspector_composition_register(SEXP sexp) {
         case SEXP_VECTOR:
             increment((trie_value_t[]){sexp_to_trie_value(sexp),
                                        sexp_to_trie_value(ATTRIB(sexp)),
+                                       ((VECSEXP) sexp)->sxpinfo.alt,
                                        to_log(((VECSEXP) sexp)->vecsxp.length),
-                                       to_log(((VECSEXP) sexp)->vecsxp.truelength)}, 4);
+                                       to_log(((VECSEXP) sexp)->vecsxp.truelength)}, 5);
             break;
 
         case SEXP_EXTERNAL:
@@ -437,5 +455,8 @@ void sexp_inspector_composition_register(SEXP sexp) {
                                        sexp_to_trie_value(TAG(sexp)),
                                        sexp_to_trie_value(CDR(sexp))}, 5);
             break;
+
+        default:
+            fprintf(stderr, "unknown type");
     }
 }
