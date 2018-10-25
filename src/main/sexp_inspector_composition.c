@@ -49,27 +49,62 @@ struct trie *new_trie_with_level_ptr(trie_value_t type, struct trie *next_level)
 }
 
 // assuming level_root != NULL
-struct trie *find_or_create_node_within_level(struct trie *level_root, trie_value_t type) {
+struct trie *find_or_create_node_within_level(struct trie *level_root, trie_value_t values[], int offset, int length) {
     struct trie *current = level_root;
     while(1)
-        if (current->value == type)
+        if (current->value == values[offset])
             return current;
         else
-            if (current->value < type) {
+            if (current->value < values[offset]) {
                 if (current->left == NULL) {
-                    current->left = new_trie_with_level_ptr(type, NULL);
+                    if (offset == length - 1)
+                        current->left = new_trie_with_value(values[offset], 0);
+                    else
+                        current->left = new_trie_with_level_ptr(values[offset], NULL);
                     return current->left;
                 } else {
                     current = current->left;
                 }
             } else /*current->value > type*/ {
                 if (current->right == NULL) {
-                    current->right = new_trie_with_level_ptr(type, NULL);
+                    if (offset == length - 1)
+                        current->right = new_trie_with_value(values[offset], 0);
+                    else
+                        current->right = new_trie_with_level_ptr(values[offset], NULL);
                     return current->right;
                 } else {
                     current = current->right;
                 }
             }
+}
+
+void debug_trie(struct trie *elem, short int end_line) {
+    if(elem == NULL) {
+        printf("null");
+        return;
+    }
+
+    printf("{value=%i, leaf=%i, ", elem->value, elem->leaf);
+
+    printf("left=");
+    debug_trie(elem->left, 0);
+    printf(", ");
+
+    printf("right=");
+    debug_trie(elem->right, 0);
+    printf(", ");
+
+    if (elem->leaf) {
+        printf("payload.counter=%i}", elem->payload.counter);
+    } else {
+        printf("payload.next_level=");
+        debug_trie(elem->payload.next_level, 0);
+        printf("}");
+    }
+
+    if (end_line) {
+        printf("\n");
+    }
 }
 
 void recursive_traverse(FILE *file, void (*f)(FILE *file, trie_value_t[], int, int),
@@ -103,13 +138,16 @@ void traverse_and_increment(struct trie *elem, trie_value_t values[], int offset
         return;
     }
 
-    struct trie *leaf = find_or_create_node_within_level(elem, values[offset]);
-    if (leaf->payload.next_level == NULL)
+    struct trie *leaf = find_or_create_node_within_level(elem, values, offset, length);
+    if (leaf->leaf) {
+        //assert(offset == length - 1);
+        leaf->payload.counter++;
+    } else if (leaf->payload.next_level == NULL) {
         leaf->payload.next_level = create_new_simple_tree(values, offset + 1, length);
-    else
+    } else {
         traverse_and_increment(leaf->payload.next_level, values, offset + 1, length);
+    }
 }
-
 
 void increment(trie_value_t values[], int levels) {
     if (composition == NULL)
@@ -138,7 +176,7 @@ void sexp_inspector_composition_initialize() {
         pid_t pid = getpid();
         int result = sprintf(composition_path, composition_path_fmt, pid);
         if(result < 0) {
-            printf("BELGIUM: (tinytracer) sprintf returned %d, "
+            fprintf(stderr, "BELGIUM: (tinytracer) sprintf returned %d, "
                            "turning off analysis", result);
             composition_analysis_is_running = 0;
         }
@@ -170,6 +208,7 @@ char *identify_symbol(trie_value_t v) {
 char *trie_value_to_string(trie_value_t v) {
     switch(v) {
         case NILSXP:     return "NILSXP";     /* 0 */
+        case -2:         return "NILSXP[R_NilValue]";
         case SYMSXP:     return "SYMSXP";     /* 1 */
         case -10:        return "SYMSXP[R_UnboundValue]";
         case LISTSXP:    return "LISTSXP";    /* 2 */
@@ -216,6 +255,7 @@ typedef enum {
 
 sexp_classification_t classify_sexp(SEXPTYPE type) {
     switch(type) {
+        case -2:
         case NILSXP:
             return SEXP_EMPTY;
 
@@ -381,10 +421,11 @@ void sexp_inspector_composition_close() {
 trie_value_t  sexp_to_trie_value(SEXP sexp){
     if (sexp == NULL)
         return -1;
+    if (sexp == R_NilValue)
+        return -2;
     if (sexp == R_UnboundValue)
         return -10;
-    else
-        return TYPEOF(sexp);
+    return TYPEOF(sexp);
 }
 
 trie_value_t to_log(int v) {
@@ -457,6 +498,7 @@ void sexp_inspector_composition_register(SEXP sexp) {
             break;
 
         default:
-            fprintf(stderr, "unknown type");
+            fprintf(stderr, "BELGIUM: unknown type %i/%i\n",
+                    TYPEOF(sexp), classify_sexp(TYPEOF(sexp)));
     }
 }
