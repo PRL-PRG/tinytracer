@@ -1559,6 +1559,8 @@ static void RunGenCollect(R_size_t size_needed)
 
     bad_sexp_type_seen = 0;
 
+    sexp_inspector_gc_start();
+
     /* determine number of generations to collect */
     while (num_old_gens_to_collect < NUM_OLD_GENERATIONS) {
 	if (collect_counts[num_old_gens_to_collect]-- <= 0) {
@@ -1787,7 +1789,7 @@ static void RunGenCollect(R_size_t size_needed)
 	    SEXP next = NEXT_NODE(s);
 	    if (TYPEOF(s) != NEWSXP) 
 		if (TYPEOF(s) != FREESXP) 
-		    sexp_inspector_gc(s);
+		    sexp_inspector_gc_collect(s);
 	    s = next;
 	}
     }
@@ -1797,7 +1799,7 @@ static void RunGenCollect(R_size_t size_needed)
 	    SEXP next = NEXT_NODE(s);
 	    if (TYPEOF(s) != NEWSXP) 
 		if (TYPEOF(s) != FREESXP) 
-		    sexp_inspector_gc(s);
+		    sexp_inspector_gc_collect(s);
 	    s = next;
 	}
     }
@@ -1810,7 +1812,7 @@ static void RunGenCollect(R_size_t size_needed)
 	    SEXP next = NEXT_NODE(s);
 	    if (TYPEOF(s) != NEWSXP) {
 		if (TYPEOF(s) != FREESXP) {
-		    sexp_inspector_gc(s);
+		    sexp_inspector_gc_collect(s);
 		    SETOLDTYPE(s, TYPEOF(s));
 		    SET_TYPEOF(s, FREESXP);
 		}
@@ -1833,7 +1835,7 @@ static void RunGenCollect(R_size_t size_needed)
 			R_size_t size = getVecSizeInVEC(s);
 			SET_STDVEC_LENGTH(s, size);
 		    }
-		    sexp_inspector_gc(s);
+		    sexp_inspector_gc_collect(s);
 		    SETOLDTYPE(s, TYPEOF(s));
 		    SET_TYPEOF(s, FREESXP);
 		}
@@ -1938,6 +1940,8 @@ void R_gc_torture(int gap, int wait, Rboolean inhibit)
     }
     else gc_inhibit_release = FALSE;
 #endif
+
+    sexp_inspector_gc_end();
 }
 
 SEXP attribute_hidden do_gctorture(SEXP call, SEXP op, SEXP args, SEXP rho)

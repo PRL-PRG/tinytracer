@@ -183,27 +183,27 @@ void sexp_inspector_composition_initialize() {
     }
 }
 
-char *identify_environment(trie_value_t v) {
-    if (v == R_GlobalEnv)
-        return "ENVSXP[R_GlobalEnv]";
-    if (v == R_EmptyEnv)
-        return "ENVSXP[R_EmptyEnv]";
-    if (v == R_BaseEnv)
-        return "ENVSXP[R_BaseEnv]";
-    if (v == R_BaseNamespace)
-        return "ENVSXP[R_BaseNamespace]";
-    if (v == R_NamespaceRegistry)
-        return "ENVSXP[R_NamespaceRegistry]";
-    return "ENVSXP";
-}
-
-char *identify_symbol(trie_value_t v) {
-    if (v == R_UnboundValue)
-        return "SYMSXP[R_UnboundValue]";
-    if (v == R_MissingArg)
-        return "SYMSXP[R_MissingArg]";
-    return "SYMSXP";
-}
+//char *identify_environment(trie_value_t v) {
+//    if (v == R_GlobalEnv)
+//        return "ENVSXP[R_GlobalEnv]";
+//    if (v == R_EmptyEnv)
+//        return "ENVSXP[R_EmptyEnv]";
+//    if (v == R_BaseEnv)
+//        return "ENVSXP[R_BaseEnv]";
+//    if (v == R_BaseNamespace)
+//        return "ENVSXP[R_BaseNamespace]";
+//    if (v == R_NamespaceRegistry)
+//        return "ENVSXP[R_NamespaceRegistry]";
+//    return "ENVSXP";
+//}
+//
+//char *identify_symbol(trie_value_t v) {
+//    if (v == R_UnboundValue)
+//        return "SYMSXP[R_UnboundValue]";
+//    if (v == R_MissingArg)
+//        return "SYMSXP[R_MissingArg]";
+//    return "SYMSXP";
+//}
 
 char *trie_value_to_string(trie_value_t v) {
     switch(v) {
