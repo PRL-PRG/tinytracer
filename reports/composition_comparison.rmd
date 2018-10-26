@@ -5,6 +5,12 @@ date: "October 18, 2018"
 output: html_document
 ---
 
+<style>
+    body .main-container {
+        max-width: 1500px;
+    }
+</style>
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
@@ -12,7 +18,7 @@ library(lemon)
 library(stringr)
 #library(ascii)
 
-options(width=160)
+options(width=200)
 options(dplyr.print_max = 1e9)
 knit_print.data.frame <- lemon_print
 
@@ -30,8 +36,25 @@ get_all_files <- function(path) {
   all_files[grepl(".*.csv$", all_files)]
 }
 
-get_metadata <- function(path, common_prefix="/home/kondziu/Workspace/tinytracer/results/") {
-  all_files <- get_all_files(path)
+create_crop_filter <- function(path1, path2) {
+  get_vignette_name <- function(path)
+    str_remove(basename(path), pattern="_[0-9]+\\.csv")
+  
+  get_unique_vignettes <- function(path) 
+     unique(get_vignette_name(get_all_files(path)))
+  
+  common_vignettes <- intersect(get_unique_vignettes(path1), 
+                                get_unique_vignettes(path2))
+  
+  function(data)
+    data[get_vignette_name(data) %in% common_vignettes]
+}
+
+simplify_type_labels <- function(type) 
+  str_remove(str_remove(type, "^.*\\["), "\\]$")
+
+get_metadata <- function(path, common_prefix="/home/kondziu/Workspace/tinytracer/results/", crop_filter=function(x) x) {
+  all_files <- crop_filter(get_all_files(path))
   
   all_metadata <- strsplit(
     basename(tools:::file_path_sans_ext(all_files)), 
@@ -47,9 +70,9 @@ get_metadata <- function(path, common_prefix="/home/kondziu/Workspace/tinytracer
     vignettes=length(vignettes))
 }
 
-get_data_and_merge <- function(path) {
+get_data_and_merge <- function(path, crop_filter=function(x) x) {
   collected_data <- NULL
-  all_files <- get_all_files(path)
+  all_files <- crop_filter(get_all_files(path))
   
   for(file in all_files) {
     write(paste0("reading ", file), stderr())
@@ -62,7 +85,7 @@ get_data_and_merge <- function(path) {
         collected_data <- 
           rbind(collected_data, csv_data) %>% 
           mutate(count=as.numeric(count)) %>%
-          group_by(type, car_type, tag_type, cdr_type) %>% 
+          group_by(type, attrib_type, car_type, tag_type, cdr_type) %>% 
           summarize(count=sum(count)) %>%
           ungroup()
     })
@@ -72,8 +95,10 @@ get_data_and_merge <- function(path) {
     mutate(type=as.character(type), 
     car_type=as.character(car_type), 
     cdr_type=as.character(cdr_type),
-    tag_type=as.character(tag_type)) %>%
-    rename(car=car_type, cdr=cdr_type, tag=tag_type)
+    tag_type=as.character(tag_type),
+    attrib_type=as.character(attrib_type)) %>%
+    rename(car=car_type, cdr=cdr_type, 
+           tag=tag_type, attrib=attrib_type)
 }
   
 concatenate_data <- function(data) do.call(rbind, data)
@@ -106,6 +131,11 @@ format_log_buckets <- function(n)
 
 filter_and_format_triples <- function(data, type)
     data %>% 
+    mutate(type=simplify_type_labels(type),
+           attrib=simplify_type_labels(attrib),
+           car=simplify_type_labels(car),
+           tag=simplify_type_labels(tag),
+           cdr=simplify_type_labels(cdr)) %>%
     filter(type == !!type) %>% 
     select(-type) %>%
     arrange(desc(count)) %>%
@@ -115,39 +145,42 @@ filter_and_format_triples <- function(data, type)
 
 filter_and_format_vectors <- function(data, type) 
     data %>% 
+    mutate(type=simplify_type_labels(type),
+           attrib=simplify_type_labels(attrib)) %>%
     filter(type == !!type) %>% 
     arrange(desc(count)) %>%
     mutate(length=format_log_buckets(as.numeric(car)), 
-           true_length=format_log_buckets(as.numeric(tag))) %>%
+           true_length=format_log_buckets(as.numeric(tag)),
+           altrep=as.logical(as.numeric(cdr))) %>%
     mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
     mutate(count=format_large_ints(count)) %>%
     filter(percent != "<1%") %>%
-    select(type, length, true_length, count, percent) %>%
+    select(type, attrib, altrep, length, true_length, count, percent) %>%
     select(-type) 
 
 filter_and_format_summary <- function(data) 
     data %>% 
+    mutate(type=simplify_type_labels(type)) %>%
     group_by(type) %>% 
     summarize(count=sum(count, na.rm=T)) %>% 
     arrange(desc(count)) %>%
     ungroup() %>% 
     mutate(percent=format_percents(100*count/sum(count, na.rm=T))) %>%
     mutate(count=format_large_ints(count)) 
-
 ```
 
 ```{r read-data, comment="", echo=F, cache=T}
-#jit_path <- "/home/vignettes/_results/18-10-12_15-08/cropped_jit/"
-#jit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-17_16-30/composition_jit/cropped/"
-jit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-18_16-08/composition/jit/cropped/"
-jit_metadata <- get_metadata(jit_path)
-jit_data <- get_data_and_merge(jit_path)
+jit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-25/composition/jit/"
+nojit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-25/composition/disable_bytecode/"
 
-#nojit_path <- "/tmp/vignettes/_results/18-10-12_15-08/cropped_nojit/"
-#nojit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-17_16-30/composition_nojit/cropped/"
-nojit_path <- "/home/kondziu/Workspace/tinytracer/results/18-10-18_16-08/composition/disable_bytecode/cropped/"
-nojit_metadata <- get_metadata(nojit_path)
-nojit_data <- get_data_and_merge(nojit_path)
+crop_filter <- create_crop_filter(jit_path, nojit_path)
+
+jit_metadata <- get_metadata(jit_path, crop_filter=crop_filter)
+jit_data <- get_data_and_merge(jit_path, crop_filter=crop_filter)
+
+nojit_metadata <- get_metadata(nojit_path, crop_filter=crop_filter)
+nojit_data <- get_data_and_merge(nojit_path, crop_filter=crop_filter)
+
 ```
 
 # Metadata
@@ -185,7 +218,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "LISTSXP") %>% rename(jit.count=count, jit.percent=percent), 
   filter_and_format_triples(nojit_data, "LISTSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib", "car", "tag", "cdr")
 ) %>% pretty_print_data
 ```
 
@@ -195,7 +228,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "PROMSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "PROMSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib","car", "tag", "cdr")
 ) %>% rename(value=car, expr=cdr, env=tag) %>% pretty_print_data
 ```
 
@@ -205,7 +238,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "ENVSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "ENVSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib","car", "tag", "cdr")
 ) %>% rename(frame=car, enclos=cdr, hashtab=tag) %>% pretty_print_data
 ```
 
@@ -215,7 +248,7 @@ full_join(
 full_join(
   filter_and_format_vectors(jit_data, "INTSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_vectors(nojit_data, "INTSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("length", "true_length")
+  by=c("attrib", "length", "true_length", "altrep")
 ) %>% pretty_print_data
 ```
 
@@ -225,7 +258,7 @@ full_join(
 full_join(
   filter_and_format_vectors(jit_data, "LGLSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_vectors(nojit_data, "LGLSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("length", "true_length")
+  by=c("attrib", "length", "true_length", "altrep")
 ) %>% pretty_print_data
 ```
 
@@ -235,7 +268,7 @@ full_join(
 full_join(
   filter_and_format_vectors(jit_data, "VECSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_vectors(nojit_data, "VECSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("length", "true_length")
+  by=c("attrib", "length", "true_length", "altrep")
 ) %>% pretty_print_data
 ```
 
@@ -245,7 +278,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "LANGSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "LANGSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib", "car", "tag", "cdr")
 ) %>% pretty_print_data
 ```
 
@@ -255,7 +288,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "DOTSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "DOTSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib", "car", "tag", "cdr")
 ) %>% pretty_print_data
 ```
 
@@ -265,7 +298,7 @@ full_join(
 full_join(
   filter_and_format_vectors(jit_data, "RAWSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_vectors(nojit_data, "RAWSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("length", "true_length")
+  by=c("attrib", "length", "true_length", "altrep")
 ) %>% pretty_print_data
 ```
 
@@ -275,7 +308,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "CLOSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "CLOSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib", "car", "tag", "cdr")
 ) %>% rename(formals=car, body=cdr, env=tag) %>% pretty_print_data
 ```
 
@@ -285,7 +318,7 @@ full_join(
 full_join(
   filter_and_format_vectors(jit_data, "CHARSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_vectors(nojit_data, "CHARSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("length", "true_length")
+  by=c("attrib", "length", "true_length", "altrep")
 ) %>% pretty_print_data
 ```
 
@@ -295,7 +328,7 @@ full_join(
 full_join(
   filter_and_format_vectors(jit_data, "REALSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_vectors(nojit_data, "REALSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("length", "true_length")
+  by=c("attrib", "length", "true_length", "altrep")
 ) %>% pretty_print_data
 ```
 
@@ -305,7 +338,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "BCODESXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "BCODESXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib", "car", "tag", "cdr")
 ) %>% rename(code=car, consts=cdr, expr=tag) %>% pretty_print_data
 ```
 
@@ -315,7 +348,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "SYMSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "SYMSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib", "car", "tag", "cdr")
 ) %>% rename(pname=car, value=cdr, internal=tag) %>% pretty_print_data
 ```
 
@@ -325,7 +358,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "EXTPTRSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "EXTPTRSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib", "car", "tag", "cdr")
 ) %>% rename(ptr=car, tag=tag, prot=cdr) %>% pretty_print_data
 ```
 
@@ -335,7 +368,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "WEAKREFSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "WEAKREFSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib", "car", "tag", "cdr")
 ) %>% rename(key=car, value=tag, finalizer=cdr) %>% pretty_print_data
 ```
 
@@ -345,7 +378,7 @@ full_join(
 full_join(
   filter_and_format_vectors(jit_data, "EXPRSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_vectors(nojit_data, "EXPRSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("length", "true_length")
+  by=c("attrib", "length", "true_length", "altrep")
 ) %>% pretty_print_data
 ```
 
@@ -355,7 +388,7 @@ full_join(
 full_join(
   filter_and_format_vectors(jit_data, "CPLXSXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_vectors(nojit_data, "CPLXSXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("length", "true_length")
+  by=c("attrib", "length", "true_length", "altrep")
 ) %>% pretty_print_data
 ```
 
@@ -365,7 +398,7 @@ full_join(
 full_join(
   filter_and_format_triples(jit_data, "S4SXP") %>% rename(jit.count=count, jit.percent=percent),
   filter_and_format_triples(nojit_data, "S4SXP") %>% rename(nojit.count=count, nojit.percent=percent),
-  by=c("car", "tag", "cdr")
+  by=c("attrib", "car", "tag", "cdr")
 ) %>% pretty_print_data
 ```
 
