@@ -5,6 +5,7 @@
 
 typedef struct {
     unsigned long fake_id;
+    SEXPTYPE initial_type;
     //unsigned int  initial_gc_cycle;
 } *t_sexp_info;
 
@@ -22,6 +23,7 @@ void sexp_inspector_initialize_fake_ids() {
 int sexp_inspector_register_fake_id(SEXP sexp) {
     t_sexp_info info = malloc(sizeof(t_sexp_info));
     info->fake_id = ++fake_id_sequence;
+    info->initial_type = TYPEOF(sexp);
 
     return hashmap_put(fake_id_dictionary, (uintptr_t) sexp, info);
 }
@@ -31,6 +33,15 @@ unsigned long *sexp_inspector_retrieve_fake_id(SEXP sexp) {
 
     if (r.status == MAP_OK)
         return &((t_sexp_info) r.value)->fake_id;
+    else
+        return NULL;
+}
+
+SEXPTYPE sexp_inspector_retrieve_initial_type(SEXP sexp) {
+    hashmap_ret_t r = hashmap_get(fake_id_dictionary, (uintptr_t) sexp);
+
+    if (r.status == MAP_OK)
+        return ((t_sexp_info) r.value)->initial_type;
     else
         return NULL;
 }
