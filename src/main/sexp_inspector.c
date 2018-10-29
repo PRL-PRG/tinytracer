@@ -48,6 +48,12 @@ void sexp_inspector_inspect_all_known() {
 void sexp_inspector_gc_start(SEXP sexp) {
     if (!sexp_inspector_are_there_analyses())
         return;
+
+    if (sexp_inspector_composition_is_running())
+        sexp_inspector_composition_learn();
+
+    // Composition:
+    // Scrape all registered sexps
 }
 
 void sexp_inspector_gc_collect(SEXP sexp) {
@@ -65,6 +71,9 @@ void sexp_inspector_gc_collect(SEXP sexp) {
     if (sexp_inspector_composition_is_running())
         sexp_inspector_composition_register(sexp);
 
+    // Composition:
+    // Register collected SEXP using scraped data
+
     if (sexp_inspector_debug_is_running()) {
         unsigned long fake_id_value = fake_id != NULL ? *fake_id : ULONG_MAX;
         sexp_inspector_debug_note_gc_unmark(sexp, fake_id_value);
@@ -76,6 +85,12 @@ void sexp_inspector_gc_collect(SEXP sexp) {
 void sexp_inspector_gc_end(SEXP sexp) {
     if (!sexp_inspector_are_there_analyses())
         return;
+
+    if (sexp_inspector_composition_is_running())
+        sexp_inspector_composition_forget();
+
+    // Composition:
+    // Remove scraped sexps
 }
 
 void sexp_inspector_close() {

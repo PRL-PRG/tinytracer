@@ -14,6 +14,7 @@ unsigned int  analysis_counter = 0;
 //unsigned int  gc_counter       = 0;
 unsigned long sexp_counter     = 0;
 unsigned long fake_id_sequence = 0;
+unsigned long fake_id_counter  = 0;
 
 void sexp_inspector_initialize_fake_ids() {
     fake_id_dictionary = hashmap_new();
@@ -22,6 +23,7 @@ void sexp_inspector_initialize_fake_ids() {
 int sexp_inspector_register_fake_id(SEXP sexp) {
     t_sexp_info info = malloc(sizeof(t_sexp_info));
     info->fake_id = ++fake_id_sequence;
+    fake_id_counter++;
 
     return hashmap_put(fake_id_dictionary, (uintptr_t) sexp, info);
 }
@@ -36,6 +38,7 @@ unsigned long *sexp_inspector_retrieve_fake_id(SEXP sexp) {
 }
 
 int sexp_inspector_remove_fake_id(SEXP sexp) {
+    fake_id_counter--;
     return hashmap_remove(fake_id_dictionary, (uintptr_t) sexp);
 }
 
@@ -65,6 +68,10 @@ unsigned long sexp_inspector_read_sexp_counter() {
 
 unsigned long sexp_inspector_read_fake_id_sequence() {
     return fake_id_sequence;
+}
+
+unsigned long sexp_inspector_count_fake_ids() {
+    return fake_id_counter;
 }
 
 void sexp_inspector_iterate_over_tracked_sexps(sexp_iter f, void *result) {

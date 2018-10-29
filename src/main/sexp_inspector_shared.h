@@ -6,6 +6,7 @@ void           sexp_inspector_initialize_fake_ids();
 int            sexp_inspector_register_fake_id(SEXP);
 unsigned long *sexp_inspector_retrieve_fake_id(SEXP);
 int            sexp_inspector_remove_fake_id(SEXP);
+unsigned long  sexp_inspector_count_fake_ids();
 
 int sexp_inspector_are_there_analyses();
 

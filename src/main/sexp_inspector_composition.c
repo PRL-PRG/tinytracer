@@ -502,3 +502,36 @@ void sexp_inspector_composition_register(SEXP sexp) {
                     TYPEOF(sexp), classify_sexp(TYPEOF(sexp)));
     }
 }
+
+struct sexp_memory_cell_t{
+    int type;
+};
+
+struct sexp_memory_cell_t *memory;
+
+int learn_about_just_the_one_sexp(SEXP sexp, void *extra) {
+    int *pointer = (int *) extra;
+    memory[*pointer].type = sexp_to_trie_value(sexp);
+
+    (*pointer)++;
+    return 0;
+}
+
+void sexp_inspector_composition_learn() {
+
+    int memory_size = sexp_inspector_count_fake_ids();
+    memory = (struct sexp_memory_cell_t *) calloc(memory_size, sizeof(struct sexp_memory_cell_t));
+    int memory_pointer = 0;
+
+    if (memory == NULL)
+        fprintf(stderr, "BELGIUM: did not allocate memory for SEXP data\n");
+
+    sexp_inspector_iterate_over_tracked_sexps(learn_about_just_the_one_sexp, &memory_pointer);
+
+    // iterate over all registered fake ids/SEXPs
+    // store their information in a data structure
+}
+
+void sexp_inspector_composition_forget() {
+    free(memory);
+}
