@@ -78,27 +78,33 @@ struct trie *find_or_create_node_within_level(struct trie *level_root, trie_valu
             }
 }
 
-void debug_trie(struct trie *elem, short int end_line) {
+void print_prefix(int level){
+    for (int i = 0; i < level; i++)
+        printf("    ");
+}
+
+
+void debug_trie(struct trie *elem, short int end_line, int level) {
     if(elem == NULL) {
         printf("null");
         return;
     }
 
-    printf("{value=%i, leaf=%i, ", elem->value, elem->leaf);
+    printf("{value=%i, leaf=%i, \n", elem->value, elem->leaf);
 
-    printf("left=");
-    debug_trie(elem->left, 0);
-    printf(", ");
+    print_prefix(level); printf("           left=");
+    debug_trie(elem->left, 0, level+1);
+    printf(",\n");
 
-    printf("right=");
-    debug_trie(elem->right, 0);
-    printf(", ");
+    print_prefix(level); printf("           right=");
+    debug_trie(elem->right, 0, level+1);
+    printf(",\n");
 
     if (elem->leaf) {
-        printf("payload.counter=%i}", elem->payload.counter);
+        print_prefix(level); printf("       payload.counter=%i}", elem->payload.counter);
     } else {
-        printf("payload.next_level=");
-        debug_trie(elem->payload.next_level, 0);
+        print_prefix(level); printf("       payload.next_level=");
+        debug_trie(elem->payload.next_level, 0, level+1);
         printf("}");
     }
 
@@ -133,11 +139,6 @@ struct trie *create_new_simple_tree(trie_value_t values[], int offset, int lengt
 }
 
 void traverse_and_increment(struct trie *elem, trie_value_t values[], int offset, int length) {
-    if (elem->leaf) {
-        elem->payload.counter++;
-        return;
-    }
-
     struct trie *leaf = find_or_create_node_within_level(elem, values, offset, length);
     if (leaf->leaf) {
         //assert(offset == length - 1);
