@@ -101,9 +101,9 @@ void debug_trie(struct trie *elem, short int end_line, int level) {
     printf(",\n");
 
     if (elem->leaf) {
-        print_prefix(level); printf("       payload.counter=%i}", elem->payload.counter);
+        print_prefix(level); printf("           payload.counter=%i}", elem->payload.counter);
     } else {
-        print_prefix(level); printf("       payload.next_level=");
+        print_prefix(level); printf("           payload.next_level=");
         debug_trie(elem->payload.next_level, 0, level+1);
         printf("}");
     }
