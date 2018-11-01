@@ -197,6 +197,8 @@ export PROGRESS_LOG="$LOGS_DIR/.progress_$$"
 mkdir -p `dirname "$PROGRESS_LOG"`
 echo $composition | wc -w > "$PROGRESS_LOG"
 
+echo progress log at $PROGRESS_LOG
+
 # Run function in parallel
 parallel --verbose --gnu --keep-order -j${N_PROCESSES} --link run_item ::: $composition
 
