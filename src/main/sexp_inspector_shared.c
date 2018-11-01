@@ -70,8 +70,8 @@ unsigned long sexp_inspector_read_fake_id_sequence() {
     return fake_id_sequence;
 }
 
-unsigned long sexp_inspector_count_fake_ids() {
-    return fake_id_counter;
+unsigned long sexp_inspector_count_registered_sexps() {
+    return hashmap_length(fake_id_dictionary);
 }
 
 void sexp_inspector_iterate_over_tracked_sexps(sexp_iter f, void *result) {

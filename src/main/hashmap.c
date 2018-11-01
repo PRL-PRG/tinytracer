@@ -21,7 +21,7 @@ typedef struct _hashmap_element{
  * as well as the data to hold. */
 typedef struct _hashmap_map{
 	int table_size;
-	int size;
+	unsigned long size;
 	hashmap_element *data;
 } hashmap_map;
 
@@ -160,7 +160,7 @@ int hashmap_put(map_t in, hashmap_key_t key, hashmap_val_t value){
 	m->data[index].data = value;
 	m->data[index].key = key;
 	m->data[index].in_use = 1;
-	m->size++; 
+	m->size++;
 
 	return MAP_OK;
 }
@@ -302,7 +302,7 @@ void hashmap_free(map_t in){
 }
 
 /* Return the length of the hashmap */
-int hashmap_length(map_t in){
+unsigned long hashmap_length(map_t in){
 	hashmap_map* m = (hashmap_map *) in;
 	if(m != NULL) return m->size;
 	else return 0;

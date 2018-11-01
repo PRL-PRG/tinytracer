@@ -519,7 +519,7 @@ int learn_about_just_the_one_sexp(SEXP sexp, void *extra) {
 
 void sexp_inspector_composition_learn() {
 
-    int memory_size = sexp_inspector_count_fake_ids();
+    unsigned long memory_size = sexp_inspector_count_registered_sexps();
     memory = (struct sexp_memory_cell_t *) calloc(memory_size, sizeof(struct sexp_memory_cell_t));
     int memory_pointer = 0;
 

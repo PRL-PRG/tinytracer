@@ -106,6 +106,6 @@ extern void hashmap_free(map_t in);
 /*
  * Get the current size of a hashmap
  */
-extern int hashmap_length(map_t in);
+extern unsigned long hashmap_length(map_t in);
 
 #endif //__HASHMAP_H__
