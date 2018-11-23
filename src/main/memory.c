@@ -1921,6 +1921,8 @@ static void RunGenCollect(R_size_t size_needed)
 	REprintf(" (level %d) ... ", gens_collected);
 	DEBUG_GC_SUMMARY(gens_collected == NUM_OLD_GENERATIONS);
     }
+
+    sexp_inspector_gc_end();
 }
 
 /* public interface for controlling GC torture settings */
@@ -1940,8 +1942,6 @@ void R_gc_torture(int gap, int wait, Rboolean inhibit)
     }
     else gc_inhibit_release = FALSE;
 #endif
-
-    sexp_inspector_gc_end();
 }
 
 SEXP attribute_hidden do_gctorture(SEXP call, SEXP op, SEXP args, SEXP rho)
