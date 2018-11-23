@@ -51,7 +51,7 @@ typedef hashmap_any_t map_t;
 /*
  * Return an empty hashmap. Returns NULL if empty.
  */
-extern map_t hashmap_new();
+extern map_t hashmap_new(char *name);
 
 /*
  * Iteratively call f with argument (key, value, data) for
@@ -90,7 +90,7 @@ extern hashmap_ret_t hashmap_get(map_t in, hashmap_key_t key);
 /*
  * Remove an element from the hashmap. Return MAP_OK or MAP_MISSING.
  */
-extern int hashmap_remove(map_t in, hashmap_key_t key);
+extern int hashmap_remove(map_t in, hashmap_key_t key, int free_value);
 
 /*
  * Get any element. Return MAP_OK or MAP_MISSING.
@@ -102,6 +102,8 @@ extern int hashmap_remove(map_t in, hashmap_key_t key);
  * Free the hashmap
  */
 extern void hashmap_free(map_t in);
+
+extern void hashmap_clear(map_t in);
 
 /*
  * Get the current size of a hashmap

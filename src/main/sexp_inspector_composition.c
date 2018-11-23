@@ -7,6 +7,7 @@
 #include "sexp_inspector_shared.h"
 #include "sexp_inspector_composition.h"
 #include "extensible_array.h"
+#include "hashmap.h"
 
 typedef int trie_value_t;
 typedef unsigned int trie_payload_t;
@@ -415,7 +416,9 @@ void sexp_inspector_composition_close() {
     if (!sexp_inspector_composition_is_running())
         return;
 
+    sexp_inspector_composition_learn();
     register_stragglers();
+    sexp_inspector_composition_forget();
     write_out_data();
 }
 
@@ -433,69 +436,110 @@ trie_value_t to_log(int v) {
     return (v == 0) ? 0 : (8 * sizeof(int) - __builtin_clz(v));
 }
 
+
+struct sexp_memory_cell_t{
+    int type;
+    int attrib;
+    union {
+        struct {
+            int car;
+            int cdr;
+            int tag;
+        } triple;
+        struct {
+            int length;
+            int true_length;
+            int alt_bit;
+        } vector;
+        struct {
+            int key;
+            int value;
+            int finalizer;
+        } weakref;
+        struct {
+            int offset;
+        } prim;
+    } body;
+    int count_this;
+};
+
+//struct sexp_memory_cell_t *memory;
+map_t memory;
+
 void sexp_inspector_composition_register(SEXP sexp) {
     counts_in_type[TYPEOF(sexp)]++;
+
+    hashmap_ret_t r = hashmap_get(memory, (uintptr_t) sexp);
+
+    if (r.status != MAP_OK) {
+        fprintf(stderr, "BELGIUM: I have not seen this SEXP %p/%i/%i/%i\n",
+                sexp, TYPEOF(sexp), classify_sexp(TYPEOF(sexp))), r.status;
+        return;
+    }
+
+    struct sexp_memory_cell_t *memory_cell = (struct sexp_memory_cell_t *) r.value;
+
     switch(classify_sexp(TYPEOF(sexp))) {
         case SEXP_EMPTY:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp)}, 1); // NIL cannot have attributes
+            increment((trie_value_t[]){memory_cell->type}, 1);
             break;
 
         case SEXP_S4:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp),
-                                       sexp_to_trie_value(ATTRIB(sexp))}, 2);
+            increment((trie_value_t[]){memory_cell->type,
+                                       memory_cell->attrib}, 2);
             break;
 
         case SEXP_TRIPLE:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp),
-                                       sexp_to_trie_value(ATTRIB(sexp)),
-                                       sexp_to_trie_value(TAG(sexp)),
-                                       sexp_to_trie_value(CDR(sexp)),
-                                       sexp_to_trie_value(CAR(sexp))}, 5);
+            increment((trie_value_t[]){memory_cell->type,
+                                       memory_cell->attrib,
+                                       memory_cell->body.triple.tag,
+                                       memory_cell->body.triple.cdr,
+                                       memory_cell->body.triple.car}, 5);
             break;
 
         case SEXP_BCODE:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp),
-                                       sexp_to_trie_value(ATTRIB(sexp)),
-                                       sexp_to_trie_value(TAG(sexp)),
-                                       sexp_to_trie_value(CDR(sexp)),
-                                       sexp_to_trie_value(CAR(sexp))}, 5);
+            increment((trie_value_t[]){memory_cell->type,
+                                       memory_cell->attrib,
+                                       memory_cell->body.triple.tag,
+                                       memory_cell->body.triple.cdr,
+                                       memory_cell->body.triple.car}, 5);
             break;
 
         case SEXP_VECTOR:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp),
-                                       sexp_to_trie_value(ATTRIB(sexp)),
-                                       ((VECSEXP) sexp)->sxpinfo.alt,
-                                       to_log(((VECSEXP) sexp)->vecsxp.length),
-                                       to_log(((VECSEXP) sexp)->vecsxp.truelength)}, 5);
+            increment((trie_value_t[]){memory_cell->type,
+                                       memory_cell->attrib,
+                                       memory_cell->body.vector.alt_bit,
+                                       memory_cell->body.vector.length,
+                                       memory_cell->body.vector.true_length}, 5);
             break;
 
         case SEXP_EXTERNAL:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp),
-                                       sexp_to_trie_value(ATTRIB(sexp)),
-                                       sexp_to_trie_value(TAG(sexp)),
-                                       sexp_to_trie_value(CDR(sexp))}, 4);
+            increment((trie_value_t[]){memory_cell->type,
+                                       memory_cell->attrib,
+                                       memory_cell->body.triple.tag,
+                                       memory_cell->body.triple.cdr}, 4);
             break;
 
         case SEXP_WEAKREF:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp),
-                                       sexp_to_trie_value(ATTRIB(sexp)),
-                                       sexp_to_trie_value(VECTOR_ELT(sexp, 0)),
-                                       sexp_to_trie_value(VECTOR_ELT(sexp, 1)),
-                                       sexp_to_trie_value(VECTOR_ELT(sexp, 2))}, 5);
+            increment((trie_value_t[]){memory_cell->type,
+                                       memory_cell->attrib,
+                                       memory_cell->body.weakref.key,
+                                       memory_cell->body.weakref.value,
+                                       memory_cell->body.weakref.finalizer}, 5);
             break;
 
         case SEXP_OFFSET:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp),
-                                       sexp_to_trie_value(ATTRIB(sexp)),
-                                       PRIMOFFSET(sexp)}, 3);
+            increment((trie_value_t[]){memory_cell->type,
+                                       memory_cell->attrib,
+                                       memory_cell->body.prim.offset}, 3);
             break;
 
         case SEXP_OTHER:
-            increment((trie_value_t[]){sexp_to_trie_value(sexp),
-                                       sexp_to_trie_value(ATTRIB(sexp)),
-                                       sexp_to_trie_value(CAR(sexp)),
-                                       sexp_to_trie_value(TAG(sexp)),
-                                       sexp_to_trie_value(CDR(sexp))}, 5);
+            increment((trie_value_t[]){memory_cell->type,
+                                       memory_cell->attrib,
+                                       memory_cell->body.triple.car,
+                                       memory_cell->body.triple.tag,
+                                       memory_cell->body.triple.cdr}, 5);
             break;
 
         default:
@@ -504,35 +548,97 @@ void sexp_inspector_composition_register(SEXP sexp) {
     }
 }
 
-struct sexp_memory_cell_t{
-    int type;
-};
-
-struct sexp_memory_cell_t *memory;
 
 int learn_about_just_the_one_sexp(SEXP sexp, void *extra) {
-    int *pointer = (int *) extra;
-    memory[*pointer].type = sexp_to_trie_value(sexp);
+    //int *pointer = (int *) extra;
 
-    (*pointer)++;
+    struct sexp_memory_cell_t *memory_cell =
+            (struct sexp_memory_cell_t *) malloc(sizeof(struct sexp_memory_cell_t));
+
+    if (memory_cell == NULL)
+        fprintf(stderr, "BELGIUM: did not allocate memory cell for SEXP data\n");
+
+    memory_cell->type = sexp_to_trie_value(sexp);
+    memory_cell->count_this = 0;
+    switch(classify_sexp(TYPEOF(sexp))) {
+        case SEXP_EMPTY:
+            memory_cell->attrib = -1;
+            memory_cell->body.triple.car = -1;
+            memory_cell->body.triple.cdr = -1;
+            memory_cell->body.triple.tag = -1;
+            break;
+
+        case SEXP_S4:
+            memory_cell->attrib = sexp_to_trie_value(ATTRIB(sexp));
+            memory_cell->body.triple.car = -1;
+            memory_cell->body.triple.cdr = -1;
+            memory_cell->body.triple.tag = -1;
+            break;
+
+        case SEXP_TRIPLE:
+        case SEXP_BCODE:
+        case SEXP_OTHER:
+            memory_cell->attrib = sexp_to_trie_value(ATTRIB(sexp));
+            memory_cell->body.triple.car = sexp_to_trie_value(CAR(sexp));
+            memory_cell->body.triple.cdr = sexp_to_trie_value(CDR(sexp));
+            memory_cell->body.triple.tag = sexp_to_trie_value(TAG(sexp));
+            break;
+
+        case SEXP_VECTOR:
+            memory_cell->attrib = sexp_to_trie_value(ATTRIB(sexp));
+            memory_cell->body.vector.length = to_log(((VECSEXP) sexp)->vecsxp.length);
+            memory_cell->body.vector.true_length = to_log(((VECSEXP) sexp)->vecsxp.truelength);
+            memory_cell->body.vector.alt_bit = ((VECSEXP) sexp)->sxpinfo.alt;
+            break;
+
+        case SEXP_EXTERNAL:
+            memory_cell->attrib = sexp_to_trie_value(ATTRIB(sexp));
+            memory_cell->body.triple.car = -1;
+            memory_cell->body.triple.cdr = sexp_to_trie_value(CDR(sexp));
+            memory_cell->body.triple.tag = sexp_to_trie_value(TAG(sexp));
+            break;
+
+        case SEXP_WEAKREF:
+            memory_cell->attrib = sexp_to_trie_value(ATTRIB(sexp));
+            memory_cell->body.weakref.key = sexp_to_trie_value(VECTOR_ELT(sexp, 0));
+            memory_cell->body.weakref.value = sexp_to_trie_value(VECTOR_ELT(sexp, 1));
+            memory_cell->body.weakref.finalizer = sexp_to_trie_value(VECTOR_ELT(sexp, 2));
+            //memory_cell->body.weakref.next = sexp_to_trie_value(VECTOR_ELT(sexp, 3));
+            break;
+
+        case SEXP_OFFSET:
+            memory_cell->attrib = sexp_to_trie_value(ATTRIB(sexp));
+            memory_cell->body.prim.offset = PRIMOFFSET(sexp);
+            break;
+
+        default:
+            fprintf(stderr, "BELGIUM: unknown type %i/%i\n",
+                    TYPEOF(sexp), classify_sexp(TYPEOF(sexp)));
+    }
+
+    hashmap_put(memory, (uintptr_t) sexp, memory_cell);
+    //(*pointer)++;
     return 0;
 }
 
 void sexp_inspector_composition_learn() {
-
-    unsigned long memory_size = sexp_inspector_count_registered_sexps();
-    memory = (struct sexp_memory_cell_t *) calloc(memory_size, sizeof(struct sexp_memory_cell_t));
-    int memory_pointer = 0;
-
+    memory = hashmap_new("memory");
+    //int memory_pointer = 0;
     if (memory == NULL)
         fprintf(stderr, "BELGIUM: did not allocate memory for SEXP data\n");
 
-    sexp_inspector_iterate_over_tracked_sexps(learn_about_just_the_one_sexp, &memory_pointer);
+    sexp_inspector_iterate_over_tracked_sexps(learn_about_just_the_one_sexp, NULL); //&memory_pointer);
 
-    // iterate over all registered fake ids/SEXPs
-    // store their information in a data structure
+    // FIXME duplicates ?
 }
 
+//void forget_about_just_the_sexp(SEXP sexp, void *extra) {
+//    hashmap_remove(memory, (uintptr_t) sexp, 1);
+//}
+
 void sexp_inspector_composition_forget() {
-    free(memory);
+    //sexp_inspector_iterate_over_tracked_sexps(forget_about_just_the_sexp, NULL);
+    hashmap_clear(memory);
+    hashmap_free(memory);
+    memory = NULL;
 }

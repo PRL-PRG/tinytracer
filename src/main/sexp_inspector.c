@@ -45,7 +45,7 @@ void sexp_inspector_inspect_all_known() {
     sexp_inspector_lives_new_gc_cycle();
 }
 
-void sexp_inspector_gc_start(SEXP sexp) {
+void sexp_inspector_gc_start() {
     if (!sexp_inspector_are_there_analyses())
         return;
 
@@ -82,7 +82,7 @@ void sexp_inspector_gc_collect(SEXP sexp) {
     sexp_inspector_remove_fake_id(sexp);
 }
 
-void sexp_inspector_gc_end(SEXP sexp) {
+void sexp_inspector_gc_end() {
     if (!sexp_inspector_are_there_analyses())
         return;
 

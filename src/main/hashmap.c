@@ -20,6 +20,7 @@ typedef struct _hashmap_element{
 /* A hashmap has some maximum size and current size,
  * as well as the data to hold. */
 typedef struct _hashmap_map{
+        char *name;
 	int table_size;
 	unsigned long size;
 	hashmap_element *data;
@@ -28,15 +29,17 @@ typedef struct _hashmap_map{
 /*
  * Return an empty hashmap, or NULL on failure.
  */
-map_t hashmap_new() {
+map_t hashmap_new(char *name) {
 	hashmap_map* m = (hashmap_map*) malloc(sizeof(hashmap_map));
 	if(!m) goto err;
 
-	m->data = (hashmap_element*) calloc(INITIAL_SIZE, sizeof(hashmap_element));
+	m->data = (hashmap_element*) calloc(INITIAL_SIZE, sizeof(hashmap_element)); // XXX
 	if(!m->data) goto err;
 
 	m->table_size = INITIAL_SIZE;
 	m->size = 0;
+
+        m->name = name;
 
 	return m;
 	err:
@@ -156,6 +159,9 @@ int hashmap_put(map_t in, hashmap_key_t key, hashmap_val_t value){
 		index = hashmap_hash(in, key);
 	}
 
+        if (m->data[index].in_use == 1)
+            fprintf(stderr, "[%s] THIS SHOULD NEVER HAPPEN: %p\n", m->name, key);
+
 	/* Set the data */
 	m->data[index].data = value;
 	m->data[index].key = key;
@@ -261,7 +267,7 @@ int hashmap_iterate_keys(map_t in, hashmap_key_iter f, void *extra) {
 /*
  * Remove an element with that key from the map
  */
-int hashmap_remove(map_t in, /*char**/ hashmap_key_t key){
+int hashmap_remove(map_t in, /*char**/ hashmap_key_t key, int free_value){
 	int i;
 	int curr;
 	hashmap_map* m;
@@ -278,6 +284,9 @@ int hashmap_remove(map_t in, /*char**/ hashmap_key_t key){
         int in_use = m->data[curr].in_use;
         if (in_use == 1){
             if (m->data[curr].key == key){
+                if (free_value)
+                    free(m->data[curr].data);
+
                 /* Blank out the fields */
                 m->data[curr].in_use = 0;
                 m->data[curr].data = NULL;
@@ -295,9 +304,33 @@ int hashmap_remove(map_t in, /*char**/ hashmap_key_t key){
 	return MAP_MISSING;
 }
 
+void hashmap_clear(map_t in) {
+    /* Cast the hashmap */
+    hashmap_map* m = (hashmap_map *) in;
+
+    /* Find key */
+    for(int curr = 0; curr < m->table_size; curr++) {
+        int in_use = m->data[curr].in_use;
+        if (in_use == 1){
+                void *tmp = m->data[curr].data;
+                free(tmp);
+
+                /* Blank out the fields */
+                m->data[curr].in_use = 0;
+                m->data[curr].data = NULL;
+                m->data[curr].key = /*NULL*/ 0;
+
+                /* Reduce the size */
+                m->size--;
+        }
+        //curr = (curr + 1) % m->table_size;
+    }
+}
+
 /* Deallocate the hashmap */
 void hashmap_free(map_t in){
 	hashmap_map* m = (hashmap_map*) in;
+        free(m->data);
 	free(m);
 }
 

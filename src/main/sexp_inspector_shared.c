@@ -17,7 +17,7 @@ unsigned long fake_id_sequence = 0;
 unsigned long fake_id_counter  = 0;
 
 void sexp_inspector_initialize_fake_ids() {
-    fake_id_dictionary = hashmap_new();
+    fake_id_dictionary = hashmap_new("Fake ID dictionary");
 }
 
 int sexp_inspector_register_fake_id(SEXP sexp) {
@@ -39,7 +39,7 @@ unsigned long *sexp_inspector_retrieve_fake_id(SEXP sexp) {
 
 int sexp_inspector_remove_fake_id(SEXP sexp) {
     fake_id_counter--;
-    return hashmap_remove(fake_id_dictionary, (uintptr_t) sexp);
+    return hashmap_remove(fake_id_dictionary, (uintptr_t) sexp, 0); // XXX should be 1?
 }
 
 int sexp_inspector_are_there_analyses() {

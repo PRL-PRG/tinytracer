@@ -30,7 +30,7 @@ void sexp_inspector_lives_initialize() {
         sexp_inspector_lived_gc_cycles = fopen(lives_path, "w");
         init_unsigned_long(&lived_gc_cycles, (size_t) 128);
         fprintf(sexp_inspector_lived_gc_cycles, "gc_cycles,count,percent\n");
-        initial_gc_cycle_map = hashmap_new();
+        initial_gc_cycle_map = hashmap_new("GC MAP");
     }
 }
 
@@ -70,7 +70,7 @@ void sexp_inspector_lives_gc_unmark(SEXP sexp) {
                                 current_gc_cycle - initial_gc_cycle);
     }
 
-    hashmap_remove(initial_gc_cycle_map, (uintptr_t) sexp);
+    hashmap_remove(initial_gc_cycle_map, (uintptr_t) sexp, 0); // should be 1?
 }
 
 void sexp_inspector_lives_new_gc_cycle() {
