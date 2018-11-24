@@ -12,8 +12,8 @@
 
 /* We need to keep keys and values */
 typedef struct _hashmap_element{
-	hashmap_key_t key;
-	int in_use;
+    hashmap_key_t key;
+    int in_use;
     hashmap_val_t data;
 } hashmap_element;
 
