@@ -2,6 +2,9 @@
 
 #include "sexp_inspector_shared.h"
 #include "hashmap.h"
+#include "hashset.h"
+
+set_t garbage_collected_sexps;
 
 typedef struct {
     unsigned long fake_id;
@@ -76,4 +79,30 @@ unsigned long sexp_inspector_count_registered_sexps() {
 
 void sexp_inspector_iterate_over_tracked_sexps(sexp_iter f, void *result) {
     hashmap_iterate_keys(fake_id_dictionary, f, result);
+}
+
+void sexp_inspector_initialize_gc_memory_registry() {
+    garbage_collected_sexps = hashset_new("GC'd SEXPS");
+    if (garbage_collected_sexps == NULL)
+        fprintf(stderr, "BELGIUM: (tinytracer) Could not initialize "
+                "hashset for garbage collected SEXPs");
+}
+
+void sexp_inspector_unregister_gc_memory(SEXP sexp) {
+    set_remove(garbage_collected_sexps, (uintptr_t) sexp);
+}
+
+/*
+ * If the memory was previously registered returns 1
+ */
+int sexp_inspector_register_gc_memory(SEXP sexp) {
+    int have_we_seen_this_one_before = set_member(garbage_collected_sexps, (uintptr_t) sexp);
+    if (have_we_seen_this_one_before == SET_OK) {
+        //fprintf(stderr, "BELGIUM: I have seen this SEXP in GC before without reallocation %p/%i/%i/%i\n",
+        //        sexp, TYPEOF(sexp), classify_sexp(TYPEOF(sexp))), r.status;
+        return 1;
+    }
+
+    set_add(garbage_collected_sexps, (uintptr_t) sexp);
+    return 0;
 }

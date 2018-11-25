@@ -16,6 +16,7 @@ void sexp_inspector_init() {
     if (sexp_inspector_are_there_analyses()) {
         sexp_inspector_debug_initialize();
         sexp_inspector_initialize_fake_ids();
+        sexp_inspector_initialize_gc_memory_registry();
     }
 }
 
@@ -23,9 +24,13 @@ void sexp_inspector_allocation(SEXP sexp) {
     if (!sexp_inspector_are_there_analyses())
         return;
 
+    sexp_inspector_unregister_gc_memory(sexp);
 
     sexp_inspector_register_fake_id(sexp);
     sexp_inspector_bump_sexp_counter();
+
+    if (sexp_inspector_composition_is_running())
+        sexp_inspector_composition_note_allocation(sexp);
 
     if (sexp_inspector_types_is_running())
         sexp_inspector_types_increment(sexp);
@@ -60,7 +65,11 @@ void sexp_inspector_gc_collect(SEXP sexp) {
     if (!sexp_inspector_are_there_analyses())
         return;
 
+    if (sexp_inspector_register_gc_memory(sexp) == 1)
+        return;
+
     unsigned long *fake_id = sexp_inspector_retrieve_fake_id(sexp);
+    // XXX XXX XXX remember sexp as having been collected
 
     if (sexp_inspector_lives_is_running())
         sexp_inspector_lives_gc_unmark(sexp);

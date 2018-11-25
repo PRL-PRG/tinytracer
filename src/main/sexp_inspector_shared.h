@@ -20,4 +20,8 @@ unsigned long sexp_inspector_count_registered_sexps();
 typedef int (*sexp_iter)(SEXP, void *result);
 void sexp_inspector_iterate_over_tracked_sexps(sexp_iter, void *result);
 
+void sexp_inspector_initialize_gc_memory_registry();
+void sexp_inspector_unregister_gc_memory(SEXP);
+int sexp_inspector_register_gc_memory(SEXP);
+
 #endif //TINYTRACER_SEXP_INSPECTOR_SHARED_H

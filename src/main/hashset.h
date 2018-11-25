@@ -7,6 +7,7 @@
 #define SET_FULL -2 	/* Set is full */
 #define SET_OMEM -1 	/* Out of Memory */
 #define SET_OK 0 	/* OK */
+#define SET_MEMBER -4 	/* Element already a member. */
 
 typedef void *set_any_t;
 typedef uintptr_t set_elem_t;

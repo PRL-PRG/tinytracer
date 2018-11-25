@@ -6,7 +6,6 @@
 #include <unistd.h>
 #include "sexp_inspector_shared.h"
 #include "sexp_inspector_composition.h"
-#include "extensible_array.h"
 #include "hashmap.h"
 
 typedef int trie_value_t;
@@ -83,7 +82,6 @@ void print_prefix(int level){
     for (int i = 0; i < level; i++)
         printf("    ");
 }
-
 
 void debug_trie(struct trie *elem, short int end_line, int level) {
     if(elem == NULL) {
@@ -182,6 +180,7 @@ void sexp_inspector_composition_initialize() {
                            "turning off analysis", result);
             composition_analysis_is_running = 0;
         }
+
     }
 }
 
@@ -436,7 +435,6 @@ trie_value_t to_log(int v) {
     return (v == 0) ? 0 : (8 * sizeof(int) - __builtin_clz(v));
 }
 
-
 struct sexp_memory_cell_t{
     int type;
     int attrib;
@@ -641,4 +639,8 @@ void sexp_inspector_composition_forget() {
     hashmap_clear(memory);
     hashmap_free(memory);
     memory = NULL;
+}
+
+void sexp_inspector_composition_note_allocation(SEXP sexp) {
+
 }

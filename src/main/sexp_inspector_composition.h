@@ -6,6 +6,7 @@
 int sexp_inspector_composition_is_running();
 void sexp_inspector_composition_initialize();
 void sexp_inspector_composition_close();
+void sexp_inspector_composition_note_allocation(SEXP);
 void sexp_inspector_composition_register(SEXP);
 void sexp_inspector_composition_learn();
 void sexp_inspector_composition_forget();

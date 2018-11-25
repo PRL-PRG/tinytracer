@@ -18,7 +18,7 @@ typedef struct _hashset_set{
 } hashset_t;
 
 set_t hashset_new(char *name) {
-    hashset_t* set = (hashset_t*) malloc(sizeof(hashset_t));
+    hashset_t *set = (hashset_t*) malloc(sizeof(hashset_t));
 
     if (set == NULL)
         return NULL;
@@ -121,14 +121,14 @@ int set_add(set_t in, set_elem_t value) {
     /* Find a place to put our value */
     int index = hashset_hash(in, value);
     while(index == SET_FULL){
-        if (hashset_rehash(in) == SET_OMEM) {
+        if (hashset_rehash(in) == SET_OMEM)
             return SET_OMEM;
-        }
         index = hashset_hash(in, value);
     }
 
     if (set->data[index].in_use == 1)
-        fprintf(stderr, "[%s] %p ALREADY A MEMBER\n", set->name, value);
+        //fprintf(stderr, "[%s] %p ALREADY A MEMBER\n", set->name, value);
+        return SET_MEMBER;
 
     /* Set the data */
     set->data[index].value = value;
@@ -185,6 +185,9 @@ int set_iterate(set_t in, set_iter_t f, void *extra) {
 int set_remove(set_t in, set_elem_t value) {
     /* Cast the hashmap */
     hashset_t *set = (hashset_t *) in;
+
+    if (set->size == 0)
+        return SET_MISSING;
 
     /* Find key */
     int curr = hashset_hash_int(set, value);

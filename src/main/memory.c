@@ -1788,7 +1788,7 @@ static void RunGenCollect(R_size_t size_needed)
 	while (s != R_GenHeap[i].New) {
 	    SEXP next = NEXT_NODE(s);
 	    if (TYPEOF(s) != NEWSXP) 
-		if (TYPEOF(s) != FREESXP) 
+		//if (TYPEOF(s) != FREESXP) // this does not happen
 		    sexp_inspector_gc_collect(s);
 	    s = next;
 	}
@@ -1798,7 +1798,7 @@ static void RunGenCollect(R_size_t size_needed)
 	while (s != R_GenHeap[i].New) {
 	    SEXP next = NEXT_NODE(s);
 	    if (TYPEOF(s) != NEWSXP) 
-		if (TYPEOF(s) != FREESXP) 
+		//if (TYPEOF(s) != FREESXP) // this does not happen
 		    sexp_inspector_gc_collect(s);
 	    s = next;
 	}
