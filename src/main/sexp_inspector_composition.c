@@ -470,8 +470,19 @@ void sexp_inspector_composition_register(SEXP sexp) {
     hashmap_ret_t r = hashmap_get(memory, (uintptr_t) sexp);
 
     if (r.status != MAP_OK) {
-        fprintf(stderr, "BELGIUM: I have not seen this SEXP %p/%i/%i/%i\n",
-                sexp, TYPEOF(sexp), classify_sexp(TYPEOF(sexp))), r.status;
+        /*
+         * This happens because the SEXP that we see in the GC loop is a technically uninitialized area of memory that
+         * was allocated inside GetNewPage as part of CLASS_GET_FREE_NODE. GetNewPage allocates a whole new empty page
+         * and splits it into SEXP-sized regions according to some specific size class. Then, the SEXPs are given empty
+         * headers from a template and snapped into a GC ring for the appropriate size class. Then, when
+         * CLASS_GET_FREE_NODE is called it quickly returns one of these pre-prepared ur-SEXPs.
+         *
+         * Since these ur-SEXPs are a part of a GC ring, they show up as free memory when we loop through GC rings. But
+         * since they have not yet gone through allocation, we have not assigned them a fake id nor do they show up in
+         * our "memory" hashmap. Thus, we get a map miss here.
+         *
+         * The appropriate course of action is to ignore these, since they are not actually SEXPs.
+         */
         return;
     }
 
