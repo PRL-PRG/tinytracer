@@ -2338,6 +2338,30 @@ static SEXP allocSExpNonCons(SEXPTYPE t)
     return s;
 }
 
+/**
+ * I added this as a variant of allocSExpNonCons. The only difference is that it doesn't have a hook at the end. This
+ * is used inside allocVector3 which also has a hook at the end. The original allocSExpNonCons function would register
+ * the allocation of a SEXP, which would then be repeated at the end of allocVector3. Adding a variant of
+ * allocSExpNonCons is easier then re-writing allocVector3 to not re-register a SEXP.
+ */
+static SEXP allocSExpNonCons__(SEXPTYPE t)
+{
+    SEXP s;
+    if (FORCE_GC || NO_FREE_NODES()) {
+        R_gc_internal(0);
+        if (NO_FREE_NODES())
+            mem_err_cons();
+    }
+    GET_FREE_NODE(s);
+    s->sxpinfo = UnmarkedNodeTemplate.sxpinfo;
+    INIT_REFCNT(s);
+    SET_TYPEOF(s, t);
+    TAG(s) = R_NilValue;
+    ATTRIB(s) = R_NilValue;
+
+    return s;
+}
+
 /* cons is defined directly to avoid the need to protect its arguments
    unless a GC will actually occur. */
 SEXP cons(SEXP car, SEXP cdr)
@@ -2817,7 +2841,7 @@ SEXP allocVector3(SEXPTYPE type, R_xlen_t length, R_allocator_t *allocator)
 	SET_TYPEOF(s, type);
     }
     else {
-	GC_PROT(s = allocSExpNonCons(type));
+	GC_PROT(s = allocSExpNonCons__(type)); // Using a variant with __ to prevent recording the allocation twice.
 	SET_STDVEC_LENGTH(s, (R_len_t) length);
     }
     SETALTREP(s, 0);

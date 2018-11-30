@@ -159,8 +159,9 @@ int hashmap_put(map_t in, hashmap_key_t key, hashmap_val_t value){
 		index = hashmap_hash(in, key);
 	}
 
-        if (m->data[index].in_use == 1)
-            fprintf(stderr, "[%s] THIS SHOULD NEVER HAPPEN: %p\n", m->name, key);
+        if (m->data[index].in_use == 1) {
+            fprintf(stderr, "[%s] BELGIUM: duplicate entry %p --- %p\n", m->name, key, m->data[index].key);
+        }
 
 	/* Set the data */
 	m->data[index].data = value;
