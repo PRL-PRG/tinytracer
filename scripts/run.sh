@@ -14,7 +14,7 @@ TEMP=$(getopt -o w:p:c:L:R: --long working-dir:,processes:,compiler:,cmd:,start-
 eval set -- "$TEMP"
 
 # Constants (possibly overriden by arguments).
-CMD="/home/$USER/Workspace/tinytracer/bin/Rscript"
+CMD="/home/$USER/tinytracer/bin/Rscript"
 WORKING_DIR='/tmp/vignettes'
 START_TIME=`date +%y-%m-%d`
 RESULTS_DIR="$WORKING_DIR/_results/$START_TIME"
@@ -73,15 +73,16 @@ function run_item {
     if [ "$runnable" = NA ]
     then    
     	echo Nothing to run for \"$item\",a $type from package $package
-        echo -n "o" >> $PROGRESS_LOG
+        echo start "$1"  >> $PROGRESS_LOG
     else 
         echo Executing \"$item\", a $type from package $package
         echo Runnable at "$runnable"
         echo Saving composition data to "$comp_file"
         SEXP_INSPECTOR_COMPOSITION="$comp_file" \
             "$CMD" "$runnable" 2 >& 1 | tee "$log_file"
+	local result="$?"
         echo Done executing \"$item\", a $type from package $package
-        echo -n "x" >> "$PROGRESS_LOG"
+        echo stop "$result" "$1" >> "$PROGRESS_LOG"
     fi
 
     return 0
@@ -112,7 +113,7 @@ function split { #eval result
     declare -p "$name" 
 }
 
-# We export variables and functions so that they are visible in subprocesses.
+# We expout variables and functions so that they are visible in subprocesses.
 export CMD
 export LOGS_DIR
 export RESULTS_DIR
@@ -167,13 +168,13 @@ export R_KEEP_PKG_SOURCE=no
 
 if [ $COMPILER = 'jit' ];
 then
-    export R_LIBS=/home/kondziu/tinytracer/R_LIBS
+    export R_LIBS=/data/kondziu/R/installed/
     export R_COMPILE_PKG=1
     export R_DISABLE_BYTECODE=0
     export R_ENABLE_JIT=3
 elif [ $COMPILER = 'disable_bytecode' ]
 then
-    export R_LIBS=/home/kondziu/tinytracer/R_LIBS
+    export R_LIBS=/data/kondziu/R/installed/
     export R_COMPILE_PKG=0
     export R_DISABLE_BYTECODE=1
     export R_ENABLE_JIT=0
@@ -195,7 +196,7 @@ echo logs at $LOGS_DIR
 
 export PROGRESS_LOG="$LOGS_DIR/.progress_$$"
 mkdir -p `dirname "$PROGRESS_LOG"`
-echo $composition | wc -w > "$PROGRESS_LOG"
+echo total `echo $composition | wc -w` > "$PROGRESS_LOG"
 
 echo progress log at $PROGRESS_LOG
 
