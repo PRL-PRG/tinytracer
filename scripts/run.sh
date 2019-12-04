@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Requires: getopt csvtool parallel
+# Requires: getopt csvtool parallel (GNU parallel) 
 
 # Preamble: option processing #################################################
 
@@ -73,11 +73,12 @@ function run_item {
     if [ "$runnable" = NA ]
     then    
     	echo Nothing to run for \"$item\",a $type from package $package
-        echo start "$1"  >> $PROGRESS_LOG
+        echo skip "$1"  >> $PROGRESS_LOG
     else 
-        echo Executing \"$item\", a $type from package $package
+	echo Executing \"$item\", a $type from package $package
         echo Runnable at "$runnable"
         echo Saving composition data to "$comp_file"
+        echo start "$1" >> "$PROGRESS_LOG"
         SEXP_INSPECTOR_COMPOSITION="$comp_file" \
             "$CMD" "$runnable" 2 >& 1 | tee "$log_file"
 	local result="$?"
@@ -195,6 +196,7 @@ echo results at $RESULTS_DIR
 echo logs at $LOGS_DIR
 
 export PROGRESS_LOG="$LOGS_DIR/.progress_$$"
+#export PROGRESS_LOCK="$LOGS_DIR/.progress_lock_$$"
 mkdir -p `dirname "$PROGRESS_LOG"`
 echo total `echo $composition | wc -w` > "$PROGRESS_LOG"
 
