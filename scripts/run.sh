@@ -5,7 +5,7 @@
 # Preamble: option processing #################################################
 
 # Set up option parsing with short and long options via getopt.
-TEMP=$(getopt -o w:p:c:L:R: --long working-dir:,processes:,compiler:,cmd:,start-from:,end-at:,logs-dir:,results-dir: -- "$@")
+TEMP=$(getopt -o Dw:p:c:L:R: --long do-not-repeat,working-dir:,processes:,compiler:,cmd:,start-from:,end-at:,logs-dir:,results-dir: -- "$@")
 
 # Check if parsing worked.
 [ $? != 0 ] && echo "Option parsing failed." >&2 && exit 1
@@ -23,21 +23,23 @@ N_PROCESSES=1
 COMPILER=jit
 START_FROM=0
 END_AT=0
+DO_NOT_REPEAT=false
 
 # Set up option variables using options passed via arguments.
 while true
 do
     case "$1" in
-        -w|--working-dir) WORKING_DIR=$2; shift 2        ;;
-        -R|--results-dir) RESULTS_DIR=$2; shift 2        ;;
-        -L|--logs-dir)    LOGS_DIR=$2;    shift 2        ;;
-        -p|--processes)   N_PROCESSES=$2; shift 2        ;;
-        -c|--cmd)         CMD=$2;         shift 2        ;;
-        --compiler)       COMPILER=$2;    shift 2        ;;
-        --start-from)     START_FROM=$2;  shift 2        ;;
-        --end-at)         END_AT=$2;      shift 2        ;;
-        --)                               shift;    break;;
-        *)                                          break;;
+        -w|--working-dir)   WORKING_DIR="$2";   shift 2        ;;
+        -R|--results-dir)   RESULTS_DIR="$2";   shift 2        ;;
+        -L|--logs-dir)      LOGS_DIR="$2";      shift 2        ;;
+        -p|--processes)     N_PROCESSES="$2";   shift 2        ;;
+        -c|--cmd)           CMD="$2";           shift 2        ;;
+        --compiler)         COMPILER="$2";      shift 2        ;;
+        --start-from)       START_FROM="$2";    shift 2        ;;
+        --end-at)           END_AT="$2";        shift 2        ;;
+	-D|--do-not-repeat) DO_NOT_REPEAT=true; shift          ;;
+        --)                                     shift;    break;;
+        *)                                                break;;
     esac
 done
 
@@ -68,12 +70,15 @@ function run_item {
     mkdir -p "$log_dir"
     mkdir -p "$comp_dir"
 
-    echo ::: running script
     # run script
-    if [ "$runnable" = NA ]
+    if repeats "$package" "$item"
+    then
+        echo "Item \"$item\" was run in a previous execution, skipping"
+	echo repeat "$1" >> "$PROGRESS_LOG"
+    elif [ "$runnable" = NA ]
     then    
-    	echo Nothing to run for \"$item\",a $type from package $package
-        echo skip "$1"  >> $PROGRESS_LOG
+    	echo Nothing to run for \"$item\", a $type from package $package
+        echo skip "$1"  >> "$PROGRESS_LOG"
     else 
 	echo Executing \"$item\", a $type from package $package
         echo Runnable at "$runnable"
@@ -114,15 +119,43 @@ function split { #eval result
     declare -p "$name" 
 }
 
+# Creates a list of already run vignettes from existing progress files.
+# $1: LOGS_DIR
+function generate_repeat_list {
+    for file in `find "$1" -name '.progress_*'`
+    do
+        <"$file" awk '
+	function just_vignette_id(string) {
+	    split(string, result, "@")
+	    return(result[3]"/"result[4])    
+        }
+	$1 == "stop"   { print just_vignette_id($3) }
+	$1 == "skip"   { print just_vignette_id($2) }
+	$1 == "repeat" { print just_vignette_id($2) }'
+    done | sort | uniq
+}
+
+# Checks if a specific vignette is in the list of already executed vignettes.
+# $1: package
+# $2: vignette
+function repeats {
+    echo $REPEAT_LIST | tr " " "\n" \
+	              | grep -w $1/$2 >/dev/null \
+		      && return 0 \
+		      || return -1
+}
+
 # We expout variables and functions so that they are visible in subprocesses.
 export CMD
 export LOGS_DIR
 export RESULTS_DIR
 export PROGRESS_LOG
 export COMPILER
+export DO_NOT_REPEAT
 export -f run_item
 export -f join
 export -f split
+export -f repeats 
 
 # Body ########################################################################
 
@@ -160,7 +193,7 @@ then
     composition=`echo $composition | tr ' ' "\n" | head -n +$(($END_AT - $START_FROM + 1))`
 fi
 
-echo $composition
+#echo $composition
 
 # R environmental variables
 echo setting R environmental variables
@@ -199,6 +232,19 @@ export PROGRESS_LOG="$LOGS_DIR/.progress_$$"
 #export PROGRESS_LOCK="$LOGS_DIR/.progress_lock_$$"
 mkdir -p `dirname "$PROGRESS_LOG"`
 echo total `echo $composition | wc -w` > "$PROGRESS_LOG"
+
+
+
+if $DO_NOT_REPEAT 
+then
+   echo DO NOT REPEAT mode is on
+   REPEAT_LIST=`generate_repeat_list "$LOGS_DIR"`
+   echo `echo $REPEAT_LIST | wc -w` vignettes have already run
+else	
+   echo DO NOT REPEAT mode is off
+   REPEAT_LIST=
+fi
+export REPEAT_LIST
 
 echo progress log at $PROGRESS_LOG
 
