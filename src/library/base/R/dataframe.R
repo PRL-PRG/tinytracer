@@ -15,7 +15,7 @@
 #  https://www.R-project.org/Licenses/
 
 # Statlib code by John Chambers, Bell Labs, 1994
-# Changes Copyright (C) 1998-2018 The R Core Team
+# Changes Copyright (C) 1998-2019 The R Core Team
 
 
 ## As from R 2.4.0, row.names can be either character or integer.
@@ -367,10 +367,12 @@ as.data.frame.array <- function(x, row.names = NULL, optional = FALSE, ...)
 {
     d <- dim(x)
     if(length(d) == 1L) { ## same as as.data.frame.vector, but deparsed here
-        value <- as.data.frame.vector(drop(x), row.names, optional, ...)
+	## c(): better than drop() or as.vector() !
+	value <- as.data.frame.vector( c(x), row.names, optional, ...)
         if(!optional) names(value) <- deparse(substitute(x))[[1L]]
         value
     } else if (length(d) == 2L) {
+        ## for explicit "array" class; otherwise *.matrix() is dispatched
         as.data.frame.matrix(x, row.names, optional, ...)
     } else {
         dn <- dimnames(x)
@@ -846,11 +848,12 @@ data.frame <-
             has.j <- TRUE
         }
     }
-    else {
+    else # nargs() <= 2
 	stop("need 0, 1, or 2 subscripts")
-    }
-    ## no columns specified
-    if(has.j && length(j) == 0L) return(x)
+
+    if ((has.j && !length(j)) ||	# "no", i.e. empty columns specified
+        (has.i && !length(i) && !has.j))# empty rows and no col.   specified
+	return(x)
 
     cl <- oldClass(x)
     ## delete class: S3 idiom to avoid any special methods for [[, etc
@@ -872,7 +875,8 @@ data.frame <-
 	    }
 	    i <- ii
 	}
-	if(all(i >= 0L) && (nn <- max(i)) > nrows) {
+	if(!is.logical(i) &&
+	   (char.i && nextra  ||  all(i >= 0L) && (nn <- max(i)) > nrows)) {
 	    ## expand
             if(is.null(rows)) rows <- attr(x, "row.names")
 	    if(!char.i) {
@@ -899,14 +903,12 @@ data.frame <-
             stop("missing values are not allowed in subscripted assignments of data frames")
 	if(is.character(j)) {
             if("" %in% j) stop("column name \"\" cannot match any column")
-	    jj <- match(j, names(x))
-	    nnew <- sum(is.na(jj))
-	    if(nnew > 0L) {
-		n <- is.na(jj)
-		jj[n] <- nvars + seq_len(nnew)
+	    jseq <- match(j, names(x))
+	    if(anyNA(jseq)) {
+		n <- is.na(jseq)
+		jseq[n] <- nvars + seq_len(sum(n))
 		new.cols <- j[n]
 	    }
-	    jseq <- jj
 	}
 	else if(is.logical(j) || min(j) < 0L)
 	    jseq <- seq_along(x)[j]
@@ -927,6 +929,10 @@ data.frame <-
 	}
     }
     else jseq <- seq_along(x)
+
+    ## empty rows and not (a *new* column as in  d[FALSE, "new"] <- val )  :
+    if(has.i && !length(iseq) && all(1L <= jseq & jseq <= nvars))
+	return(`class<-`(x, cl))
 
     ## addition in 1.8.0
     if(anyDuplicated(jseq))
@@ -1038,17 +1044,18 @@ data.frame <-
 	    vjj <- value[[ jvseq[[jjj]] ]]
             if(jj <= nvars) {
                 ## if a column exists, preserve its attributes
-                if(length(dim(x[[jj]])) != 2L) x[[jj]][iseq] <- vjj
+                if(length(dim(x[[jj]])) != 2L)
+                     x[[jj]][iseq  ] <- vjj
                 else x[[jj]][iseq, ] <- vjj
             } else {
                 ## try to make a new column match in length: may be an error
                 x[[jj]] <- vjj[FALSE]
                 if(length(dim(vjj)) == 2L) {
-                    length(x[[j]]) <- nrows * ncol(vjj)
-                    dim(x[[j]]) <- c(nrows, ncol(vjj))
+                    length(x[[jj]]) <- nrows * ncol(vjj)
+                    dim(x[[jj]])  <- c(nrows,  ncol(vjj))
                     x[[jj]][iseq, ] <- vjj
                 } else {
-                    length(x[[j]]) <- nrows
+                    length(x[[jj]]) <- nrows
                     x[[jj]][iseq] <- vjj
                 }
             }
@@ -1207,20 +1214,6 @@ data.frame <-
     return(x)
 }
 
-### Added for 3.1.0
-`$.data.frame` <- function(x,name) {
-  a <- x[[name]]
-  if (!is.null(a)) return(a)
-
-  a <- x[[name, exact=FALSE]]
-  if (!is.null(a) && getOption("warnPartialMatchDollar", default=FALSE)) {
-  	names <- names(x)
-  	warning(gettextf("Partial match of '%s' to '%s' in data frame",
-                                   name, names[pmatch(name, names)]))
-  }
-  return(a)
-}
-
 
 xpdrows.data.frame <- function(x, old.rows, new.rows)
 {
@@ -1265,7 +1258,8 @@ cbind.data.frame <- function(..., deparse.level = 1)
     data.frame(..., check.names = FALSE)
 
 rbind.data.frame <- function(..., deparse.level = 1, make.row.names = TRUE,
-                             stringsAsFactors = default.stringsAsFactors())
+                             stringsAsFactors = default.stringsAsFactors(),
+                             factor.exclude = NA)
 {
     match.names <- function(clabs, nmi)
     {
@@ -1288,8 +1282,10 @@ rbind.data.frame <- function(..., deparse.level = 1, make.row.names = TRUE,
                      else if(is.list(x)) length(x[[1L]])
 					# mismatched lists are checked later
                      else length(x), 1L)
-        if(any(nr > 0L)) allargs <- allargs[nr > 0L]
-        else return(allargs[[1L]]) # pretty arbitrary
+	if(any(n0 <- nr == 0L)) {
+	    if(all(n0)) return(allargs[[1L]]) # pretty arbitrary
+	    allargs <- allargs[!n0]
+	}
     }
     n <- length(allargs)
     if(n == 0L)
@@ -1321,11 +1317,13 @@ rbind.data.frame <- function(..., deparse.level = 1, make.row.names = TRUE,
 	    }
 	}
     }
+    smartX <- isTRUE(factor.exclude)
+
+    ## check the arguments, develop row and column labels
     nrow <- 0L
     value <- clabs <- NULL
     all.levs <- list()
-    for(i in seq_len(n)) {
-	## check the arguments, develop row and column labels
+    for(i in seq_len(n)) { ## check and treat arg [[ i ]]  -- part 1
 	xi <- allargs[[i]]
 	nmi <- nms[i]
         ## coerce matrix to data frame
@@ -1352,15 +1350,20 @@ rbind.data.frame <- function(..., deparse.level = 1, make.row.names = TRUE,
 		nvar <- length(value)
 		all.levs <- vector("list", nvar)
 		has.dim <- facCol <- ordCol <- logical(nvar)
+		if(smartX) NA.lev <- ordCol
 		for(j in seq_len(nvar)) {
 		    xj <- value[[j]]
-                    facCol[j] <-
-                        if(!is.null(levels(xj))) {
-                            all.levs[[j]] <- levels(xj)
+                    facCol[j] <- fac <-
+                        if(!is.null(lj <- levels(xj))) {
+                            all.levs[[j]] <- lj
                             TRUE # turn categories into factors
                         } else
                             is.factor(xj)
-                    ordCol[j] <- is.ordered(xj)
+		    if(fac) {
+			ordCol[j] <- is.ordered(xj)
+			if(smartX && !NA.lev[j])
+			    NA.lev[j] <- anyNA(lj)
+		    }
 		    has.dim[j] <- length(dim(xj)) == 2L
 		}
 	    }
@@ -1370,12 +1373,15 @@ rbind.data.frame <- function(..., deparse.level = 1, make.row.names = TRUE,
                 if(facCol[jj]) {
                     if(length(lij <- levels(xij))) {
                         all.levs[[jj]] <- unique(c(all.levs[[jj]], lij))
-                        ordCol[jj] <- ordCol[jj] & is.ordered(xij)
+			if(ordCol[jj])
+			    ordCol[jj] <- is.ordered(xij)
+			if(smartX && !NA.lev[jj])
+			    NA.lev[jj] <- anyNA(lij)
                     } else if(is.character(xij))
                         all.levs[[jj]] <- unique(c(all.levs[[jj]], xij))
                 }
             }
-	}
+	} ## end{data.frame}
 	else if(is.list(xi)) {
 	    ni <- range(lengths(xi))
 	    if(ni[1L] == ni[2L])
@@ -1401,7 +1407,8 @@ rbind.data.frame <- function(..., deparse.level = 1, make.row.names = TRUE,
             if(make.row.names)
 		rlabs[[i]] <- if(nzchar(nmi)) nmi else as.integer(nrow)
 	}
-    }
+    } # for(i .)
+
     nvar <- length(clabs)
     if(nvar == 0L)
 	nvar <- max(lengths(allargs)) # only vector args
@@ -1414,25 +1421,35 @@ rbind.data.frame <- function(..., deparse.level = 1, make.row.names = TRUE,
 	value[pseq] <- list(logical(nrow)) # OK for coercion except to raw.
         all.levs <- vector("list", nvar)
 	has.dim <- facCol <- ordCol <- logical(nvar)
+	if(smartX) NA.lev <- ordCol
     }
     names(value) <- clabs
     for(j in pseq)
 	if(length(lij <- all.levs[[j]]))
             value[[j]] <-
-                factor(as.vector(value[[j]]), lij, ordered = ordCol[j])
-    if(any(has.dim)) {
-	rmax <- max(unlist(rows))
-	for(i in pseq[has.dim])
-	    if(!inherits(xi <- value[[i]], "data.frame")) {
-		dn <- dimnames(xi)
+		factor(as.vector(value[[j]]), levels = lij,
+		       exclude = if(smartX) {
+				     if(!NA.lev[j]) NA # else NULL
+				 } else factor.exclude,
+		       ordered = ordCol[j])
+
+    if(any(has.dim)) { # some col's are matrices or d.frame's
+        jdim <- pseq[has.dim]
+        if(!all(df <- vapply(jdim, function(j) inherits(value[[j]],"data.frame"), NA))) {
+            ## Ensure matrix columns can be filled in  for(i ...) below
+            rmax <- max(unlist(rows))
+            for(j in jdim[!df]) {
+		dn <- dimnames(vj <- value[[j]])
 		rn <- dn[[1L]]
 		if(length(rn) > 0L) length(rn) <- rmax
-		pi <- dim(xi)[2L]
-		length(xi) <- rmax * pi
-		value[[i]] <- array(xi, c(rmax, pi), list(rn, dn[[2L]]))
+		pj <- dim(vj)[2L]
+		length(vj) <- rmax * pj
+		value[[j]] <- array(vj, c(rmax, pj), list(rn, dn[[2L]]))
 	    }
+        }
     }
-    for(i in seq_len(n)) {
+
+    for(i in seq_len(n)) { ## add arg [[i]] to result
 	xi <- unclass(allargs[[i]])
 	if(!is.list(xi))
 	    if(length(xi) != nvar)
@@ -1446,7 +1463,7 @@ rbind.data.frame <- function(..., deparse.level = 1, make.row.names = TRUE,
 	    if(has.dim[jj]) {
 		value[[jj]][ri,	 ] <- xij
                 ## copy rownames
-                rownames(value[[jj]])[ri] <- rownames(xij)
+                if(!is.null(r <- rownames(xij))) rownames(value[[jj]])[ri] <- r
 	    } else {
                 ## coerce factors to vectors, in case lhs is character or
                 ## level set has changed
@@ -1477,7 +1494,7 @@ rbind.data.frame <- function(..., deparse.level = 1, make.row.names = TRUE,
 
 print.data.frame <-
     function(x, ..., digits = NULL, quote = FALSE, right = TRUE,
-	     row.names = TRUE)
+	     row.names = TRUE, max = NULL)
 {
     n <- length(row.names(x))
     if(length(x) == 0L) {
@@ -1489,12 +1506,21 @@ print.data.frame <-
 	print.default(names(x), quote = FALSE)
 	cat(gettext("<0 rows> (or 0-length row.names)\n"))
     } else {
+	if(is.null(max)) max <- getOption("max.print", 99999L)
+        if(!is.finite(max)) stop("invalid 'max' / getOption(\"max.print\"): ", max)
 	## format.<*>() : avoiding picking up e.g. format.AsIs
-	m <- as.matrix(format.data.frame(x, digits = digits, na.encode = FALSE))
+	omit <- (n0 <- max %/% length(x)) < n
+	m <- as.matrix(
+	    format.data.frame(if(omit) x[seq_len(n0), , drop=FALSE] else x,
+			      digits = digits, na.encode = FALSE))
 	if(!isTRUE(row.names))
 	    dimnames(m)[[1L]] <-
-		if(isFALSE(row.names)) rep.int("", n) else row.names
-	print(m, ..., quote = quote, right = right)
+		if(isFALSE(row.names)) rep.int("", if(omit) n0 else n)
+		else row.names
+	print(m, ..., quote = quote, right = right, max = max)
+	if(omit)
+	    cat(" [ reached 'max' / getOption(\"max.print\") -- omitted",
+		n - n0, "rows ]\n")
     }
     invisible(x)
 }
@@ -1540,10 +1566,13 @@ as.matrix.data.frame <- function (x, rownames.force = NA, ...)
 	for (j in pseq) {
 	    if (is.character(X[[j]]))
 		next
-	    xj <- X[[j]]
-            miss <- is.na(xj)
-	    xj <- if(length(levels(xj))) as.vector(xj) else format(xj)
-            is.na(xj) <- miss
+	    else if(is.logical(xj <- X[[j]]))
+		xj <- as.character(xj) # not format(), takes care of NAs too
+	    else {
+		miss <- is.na(xj)
+		xj <- if(length(levels(xj))) as.vector(xj) else format(xj)
+		is.na(xj) <- miss
+	    }
             X[[j]] <- xj
 	}
     }
@@ -1644,7 +1673,7 @@ Ops.data.frame <- function(e1, e2 = NULL)
 	}
     }
     for(j in seq_along(cn)) {
-	left <- if(!lscalar) e1[[j]] else e1
+	left  <- if(!lscalar) e1[[j]] else e1
 	right <- if(!rscalar) e2[[j]] else e2
 	value[[j]] <- eval(f)
     }

@@ -1,7 +1,7 @@
 /*
  *  R : A Computer Language for Statistical Data Analysis
  *  (C) Copyright 2008-2011 Simon Urbanek
- *      Copyright 2011-2017 R Core Team.
+ *      Copyright 2011-2019 R Core Team.
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@
    
    Derived from multicore version 0.1-8 by Simon Urbanek
 */
-//#define MC_DEBUG
+/* #define MC_DEBUG */
 
 #ifdef HAVE_CONFIG_H
 # include <config.h> /* for affinity function checks and sigaction */
@@ -81,7 +81,7 @@ void Dprintf(char *format, ...) {
    can never become attached.
 
    An attached child is visible to R user code and always has file descriptors
-   sifd and pifd open and >= 0). It becomes detached via readChild() when it
+   sifd and pifd open and >= 0. It becomes detached via readChild() when it
    returns an integer (signalling to user that the child is finishing or has
    failed). An attached child is never waited for in the signal handler as
    user R code is allowed to invoke operations on the child, such as kill - if
@@ -256,7 +256,7 @@ static void compact_children() {
 	    if (ci->ppid != ppid) {
 		close_fds_child_ci(ci);
 #ifdef MC_DEBUG
-		Dprintf("removing child %d from the listi as it is not ours\n", ci->pid);
+		Dprintf("removing child %d from the list as it is not ours\n", ci->pid);
 #endif
 	    }
 #ifdef MC_DEBUG
@@ -288,6 +288,8 @@ SEXP mc_prepare_cleanup()
     ci->waitedfor = 1;
     ci->detached = 1;
     ci->pid = -1; /* a cleanup mark */
+    ci->pfd = -1;
+    ci->sifd = -1; /* set fds to -1 to simplify close */
     ci->ppid = getpid();
     ci->next = children;
     children = ci;
@@ -361,7 +363,7 @@ SEXP mc_cleanup(SEXP sKill, SEXP sDetach, SEXP sShutdown)
 	    /* only kills if not waited for */
 	    kill_detached_child_ci(ci, sig);
 	if (!ci->detached && detach) {
-	    /* With sKill ==  FALSE (mclapply mc.cleanup=FALSE), send
+	    /* With sKill == FALSE (mclapply mc.cleanup=FALSE), send
 	       SIGUSR1 to just detach the child. Detaching also closes the file
 	       descriptors which contributes to termination probably even more,
 	       as it is not likely that the child will be finished and just
@@ -764,23 +766,23 @@ SEXP mc_select_children(SEXP sTimeout, SEXP sWhich)
 	    /* attached children have ci->pfd > 0 */
 	    if (which) { /* check for the FD only if it's on the list */
 		unsigned int k = 0;
-		int found = 0;
-		while (k < wlen) 
-		    if (which[k++] == ci->pid) { 
+		while (k < wlen) {
+		    if (which[k++] == ci->pid) {
+			if (ci->pfd > FD_SETSIZE)
+			    error("file descriptor is too large for select()");
 			FD_SET(ci->pfd, &fs);
 			if (ci->pfd > maxfd) maxfd = ci->pfd;
 #ifdef MC_DEBUG
 			Dprintf("select_children: added child %d (%d)\n", ci->pid, ci->pfd);
 #endif
 			wcount++;
-			found = 1;
 			break; 
 		    }
-		if (!found)
-		    /* FIXME: probably should be an error */
-		    warning(_("cannot wait for child %d as it does not exist"), ci->pid);
+		}
 	    } else {
 		/* not sure if this should be allowed */
+		if (ci->pfd > FD_SETSIZE)
+		    error("file descriptor is too large for select()");
 		FD_SET(ci->pfd, &fs);
 		if (ci->pfd > maxfd) maxfd = ci->pfd;
 #ifdef MC_DEBUG
@@ -789,6 +791,31 @@ SEXP mc_select_children(SEXP sTimeout, SEXP sWhich)
 	    }
 	}
 	ci = ci->next;
+    }
+
+    if (which && wcount < wlen) {
+	/* children specified multiple times or not found */
+	for(unsigned int k = 0; k < wlen; k++) {
+	    ci = children;
+	    int found = 0;
+	    while(ci) {
+		if (!ci->detached && ci->ppid == ppid &&
+		    ci->pid == which[k] && FD_ISSET(ci->pfd, &fs)) {
+
+		    found = 1;
+		    break;
+		}
+		ci = ci->next;
+	    }
+	    if (!found) {
+#ifdef MC_DEBUG
+		Dprintf("select_children: cannot wait for child %d (idx %d) as it does not exist\n",
+		        which[k], k);
+#endif
+		/* FIXME: probably should be an error */
+		warning(_("cannot wait for child %d as it does not exist"), which[k]);
+	    }
+	}
     }
 
 #ifdef MC_DEBUG
@@ -884,7 +911,7 @@ static SEXP read_child_ci(child_info_t *ci)
     Dprintf("read_child_ci(%d) - read length returned %lld\n", pid, (long long)n);
 #endif
     if (n != sizeof(len) || len == 0) {
-	/* child is exiting (len==0), or error */
+	/* child is exiting (n==0), or error */
 	terminate_and_detach_child_ci(ci);
 	return ScalarInteger(pid);
     } else {
@@ -988,7 +1015,6 @@ SEXP mc_read_children(SEXP sTimeout)
     else return read_child_ci(ci);
 }
 
-/* not used */
 SEXP mc_rm_child(SEXP sPid) 
 {
     int pid = asInteger(sPid);
@@ -1063,21 +1089,34 @@ SEXP mc_kill(SEXP sPid, SEXP sSig)
     return ScalarLogical(1);
 }
 
+extern int R_ignore_SIGPIPE; /* defined in src/main/main.c on unix */
+
 SEXP NORET mc_exit(SEXP sRes)
 {
     int res = asInteger(sRes);
 #ifdef MC_DEBUG
-    Dprintf("child %d: 'mcexit' called\n", getpid());
+    Dprintf("child %d: 'mcexit(%d)' called, master_fd=%d\n", getpid(),
+            res, master_fd);
 #endif
     if (is_master) error(_("'mcexit' can only be used in a child process"));
     if (master_fd != -1) { /* send 0 to signify that we're leaving */
 	size_t len = 0;
+	/* If rmChild() was called, the master may already have closed its end
+	   of the pipe, so the write may fail with EPIPE; disable the default
+	   R SIGPIPE handler to avoid a runtime error in that case, and ignore
+	   EPIPE. This may hide also real errors, but they should be detected
+	   via other means (results not delivered). Alternatively, we could
+	   rewrite mccollect(wait=FALSE) to wait for jobs that delivered
+	   results to also finish, and avoid using rmChild(). */
+	R_ignore_SIGPIPE = 1;
 	/* assign result for Fedora security settings */
 	ssize_t n = writerep(master_fd, &len, sizeof(len));
 	/* make sure the pipe is closed before we enter any waiting */
 	close(master_fd);
+	R_ignore_SIGPIPE = 0;
 	master_fd = -1;
-	if (n < 0) error(_("write error, closing pipe to the master"));
+	if (n < 0 && errno != EPIPE)
+	    error(_("write error, closing pipe to the master"));
     }
     if (!child_can_exit) {
 #ifdef MC_DEBUG
@@ -1088,7 +1127,7 @@ SEXP NORET mc_exit(SEXP sRes)
     }
 		
 #ifdef MC_DEBUG
-    Dprintf("child %d: exiting\n", getpid());
+    Dprintf("child %d: exiting with exit status %d\n", getpid(), res);
 #endif
     _exit(res);
     error(_("'mcexit' failed"));

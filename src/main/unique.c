@@ -1,7 +1,7 @@
 /*
  *  R : A Computer Language for Statistical Data Analysis
- *  Copyright (C) 1995, 1996, 2017  Robert Gentleman and Ross Ihaka
- *  Copyright (C) 1997--2016  The R Core Team
+ *  Copyright (C) 1997--2019  The R Core Team
+ *  Copyright (C) 1995, 1996  Robert Gentleman and Ross Ihaka
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -879,14 +879,11 @@ static SEXP match_transform(SEXP s, SEXP env)
 // workhorse of R's match() and hence also  " ix %in% itable "
 SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
 {
-    SEXP ans, x, table;
-    SEXPTYPE type;
-    HashData data;
-
     R_xlen_t n = xlength(ix);
-
     /* handle zero length arguments */
     if (n == 0) return allocVector(INTSXP, 0);
+
+    SEXP ans;
     if (length(itable) == 0) {
 	ans = allocVector(INTSXP, n);
 	int *pa = INTEGER0(ans);
@@ -895,10 +892,11 @@ SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
     }
 
     int nprot = 0;
-    PROTECT(x	  = match_transform(ix,	    env)); nprot++;
-    PROTECT(table = match_transform(itable, env)); nprot++;
+    SEXP x     = PROTECT(match_transform(ix,     env)); nprot++;
+    SEXP table = PROTECT(match_transform(itable, env)); nprot++;
     /* or should we use PROTECT_WITH_INDEX and REPROTECT below ? */
 
+    SEXPTYPE type;
     /* Coerce to a common type; type == NILSXP is ok here.
      * Note that above we coerce factors and "POSIXlt", only to character.
      * Hence, coerce to character or to `higher' type
@@ -911,11 +909,11 @@ SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
     // special case scalar x -- for speed only :
     if(XLENGTH(x) == 1 && !incomp) {
       int val = nmatch;
-      int nitable = LENGTH(itable);
+      int ntable = LENGTH(table);
       switch (type) {
       case STRSXP: {
 	  SEXP x_val = STRING_ELT(x,0);
-	  for (int i=0; i < nitable; i++) if (Seql(STRING_ELT(table,i), x_val)) {
+	  for (int i=0; i < ntable; i++) if (Seql(STRING_ELT(table,i), x_val)) {
 		  val = i + 1; break;
 	      }
 	  break; }
@@ -923,7 +921,7 @@ SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
       case INTSXP: {
 	  int x_val = INTEGER_ELT(x, 0),
 	      *table_p = INTEGER(table);
-	  for (int i=0; i < nitable; i++) if (table_p[i] == x_val) {
+	  for (int i=0; i < ntable; i++) if (table_p[i] == x_val) {
 		  val = i + 1; break;
 	      }
 	  break; }
@@ -934,17 +932,17 @@ SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
 	  double *table_p = REAL(table);
 	  /* we want all NaNs except NA equal, and all NAs equal */
 	  if (R_IsNA(x_val)) {
-	      for (int i=0; i < nitable; i++) if (R_IsNA(table_p[i])) {
+	      for (int i=0; i < ntable; i++) if (R_IsNA(table_p[i])) {
 		      val = i + 1; break;
 		  }
 	  }
 	  else if (R_IsNaN(x_val)) {
-	      for (int i=0; i < nitable; i++) if (R_IsNaN(table_p[i])) {
+	      for (int i=0; i < ntable; i++) if (R_IsNaN(table_p[i])) {
 		      val = i + 1; break;
 		  }
 	  }
 	  else {
-	      for (int i=0; i < nitable; i++) if (table_p[i] == x_val) {
+	      for (int i=0; i < ntable; i++) if (table_p[i] == x_val) {
 		      val = i + 1; break;
 	      }
 	  }
@@ -952,7 +950,7 @@ SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
       case CPLXSXP: {
 	  Rcomplex x_val = COMPLEX_ELT(x, 0),
 	      *table_p = COMPLEX(table);
-	  for (int i=0; i < nitable; i++)
+	  for (int i=0; i < ntable; i++)
 	      if (cplx_eq(table_p[i], x_val)) {
 		  val = i + 1; break;
 	      }
@@ -960,7 +958,7 @@ SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
       case RAWSXP: {
 	  Rbyte x_val = RAW_ELT(x, 0),
 	      *table_p = RAW(table);
-	  for (int i=0; i < nitable; i++) if (table_p[i] == x_val) {
+	  for (int i=0; i < ntable; i++) if (table_p[i] == x_val) {
 		  val = i + 1; break;
 	      }
 	  break; }
@@ -968,7 +966,7 @@ SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
       PROTECT(ans = ScalarInteger(val)); nprot++;
     }
     else { // regular case
-
+	HashData data;
 	if (incomp) { PROTECT(incomp = coerceVector(incomp, type)); nprot++; }
 	data.nomatch = nmatch;
 	HashTableSetup(table, &data, NA_INTEGER);
@@ -976,7 +974,7 @@ SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
 	    Rboolean useBytes = FALSE;
 	    Rboolean useUTF8 = FALSE;
 	    Rboolean useCache = TRUE;
-	    for(R_xlen_t i = 0; i < length(x); i++) {
+	    for(R_xlen_t i = 0; i < xlength(x); i++) {
 		SEXP s = STRING_ELT(x, i);
 		if(IS_BYTES(s)) {
 		    useBytes = TRUE;
@@ -992,7 +990,7 @@ SEXP match5(SEXP itable, SEXP ix, int nmatch, SEXP incomp, SEXP env)
 		}
 	    }
 	    if(!useBytes || useCache) {
-		for(int i = 0; i < length(table); i++) {
+		for(int i = 0; i < LENGTH(table); i++) {
 		    SEXP s = STRING_ELT(table, i);
 		    if(IS_BYTES(s)) {
 			useBytes = TRUE;
@@ -1474,7 +1472,7 @@ SEXP attribute_hidden do_matchcall(SEXP call, SEXP op, SEXP args, SEXP env)
     rlist = StripUnmatched(rlist);
 
     PROTECT(rval = allocSExp(LANGSXP));
-    SETCAR(rval, duplicate(CAR(funcall)));
+    SETCAR(rval, lazy_duplicate(CAR(funcall)));
     SETCDR(rval, rlist);
     UNPROTECT(3);
     return rval;

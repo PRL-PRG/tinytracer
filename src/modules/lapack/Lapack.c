@@ -1,6 +1,6 @@
 /*
  *  R : A Computer Language for Statistical Data Analysis
- *  Copyright (C) 2001--2017  The R Core Team.
+ *  Copyright (C) 2001--2018  The R Core Team.
  *  Copyright (C) 2003--2010  The R Foundation
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -213,7 +213,6 @@ static SEXP La_rs(SEXP x, SEXP only_values)
 	nm = PROTECT(allocVector(STRSXP, 2));
 	SET_STRING_ELT(nm, 1, mkChar("vectors"));
 	SET_VECTOR_ELT(ret, 1, z);
-	UNPROTECT_PTR(z);
     } else {
 	ret = PROTECT(allocVector(VECSXP, 1));
 	nm = PROTECT(allocVector(STRSXP, 1));
@@ -221,7 +220,7 @@ static SEXP La_rs(SEXP x, SEXP only_values)
     SET_STRING_ELT(nm, 0, mkChar("values"));
     setAttrib(ret, R_NamesSymbol, nm);
     SET_VECTOR_ELT(ret, 0, values);
-    UNPROTECT(4);
+    UNPROTECT(ov ? 4 : 5);
     return ret;
 }
 
@@ -955,7 +954,7 @@ static SEXP La_chol(SEXP A, SEXP pivot, SEXP stol)
     if (piv != 0 && piv != 1) error("invalid '%s' value", "pivot");
     if(!piv) {
 	int info;
-	F77_CALL(dpotrf)("Upper", &m, REAL(ans), &m, &info);
+	F77_CALL(dpotrf)("U", &m, REAL(ans), &m, &info);
 	if (info != 0) {
 	    if (info > 0)
 		error(_("the leading minor of order %d is not positive definite"),
@@ -1024,7 +1023,7 @@ static SEXP La_chol2inv(SEXP A, SEXP size)
 		REAL(ans)[i + j * SZ] = REAL(Amat)[i + j * M];
 	}
 	int info;
-	F77_CALL(dpotri)("Upper", &sz, REAL(ans), &sz, &info);
+	F77_CALL(dpotri)("U", &sz, REAL(ans), &sz, &info);
 	if (info != 0) {
 	    UNPROTECT(nprot);
 	    if (info > 0)

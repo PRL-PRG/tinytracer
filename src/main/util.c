@@ -1,7 +1,7 @@
 /*
  *  R : A Computer Language for Statistical Data Analysis
  *  Copyright (C) 1995, 1996  Robert Gentleman and Ross Ihaka
- *  Copyright (C) 1997--2018  The R Core Team
+ *  Copyright (C) 1997--2019  The R Core Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -59,7 +59,7 @@ void NORET F77_SYMBOL(rexitc)(char *msg, int *nchar);
 
 /* Many small functions are included from ../include/Rinlinedfuns.h */
 
-int nrows(SEXP s)
+int nrows(SEXP s) // ~== NROW(.)  in R
 {
     SEXP t;
     if (isVector(s) || isList(s)) {
@@ -75,7 +75,7 @@ int nrows(SEXP s)
 }
 
 
-int ncols(SEXP s)
+int ncols(SEXP s) // ~== NCOL(.)  in R
 {
     SEXP t;
     if (isVector(s) || isList(s)) {
@@ -255,13 +255,13 @@ void InitTypeTables(void) {
 	    SEXP rstr = ScalarString(rchar);
 	    MARK_NOT_MUTABLE(rstr);
 	    R_PreserveObject(rstr);
-	    UNPROTECT(1); /* rchar */
 	    SEXP rsym = install(cstr);
 
 	    Type2Table[type].cstrName = cstr;
 	    Type2Table[type].rcharName = rchar;
 	    Type2Table[type].rstrName = rstr;
 	    Type2Table[type].rsymName = rsym;
+	    UNPROTECT(1); /* rchar */
 	} else {
 	    Type2Table[type].cstrName = NULL;
 	    Type2Table[type].rcharName = NULL;
@@ -537,7 +537,8 @@ void attribute_hidden setIVector(int * vec, int len, int val)
 }
 
 
-/* unused in R, in Utils.h, apparently used in Rcpp  */
+/* unused in R, in Utils.h, may have been used in Rcpp at some point,
+      but not any more (as per Nov. 2018)  */
 void attribute_hidden setRVector(double * vec, int len, double val)
 {
     for (int i = 0; i < len; i++) vec[i] = val;
@@ -950,7 +951,7 @@ extern char *realpath(const char *path, char *resolved_path);
 
 SEXP attribute_hidden do_normalizepath(SEXP call, SEXP op, SEXP args, SEXP rho)
 {
-    SEXP ans, paths = CAR(args);
+    SEXP ans, paths = CAR(args), elp;
     int i, n = LENGTH(paths);
     const char *path;
     char abspath[PATH_MAX+1];
@@ -965,12 +966,21 @@ SEXP attribute_hidden do_normalizepath(SEXP call, SEXP op, SEXP args, SEXP rho)
 #ifdef HAVE_REALPATH
     PROTECT(ans = allocVector(STRSXP, n));
     for (i = 0; i < n; i++) {
-	path = translateChar(STRING_ELT(paths, i));
+	elp = STRING_ELT(paths, i);
+	if (elp == NA_STRING) {
+	    SET_STRING_ELT(ans, i, NA_STRING);
+	    if (mustWork == 1)
+		error("path[%d]=NA", i+1);
+	    else if (mustWork == NA_LOGICAL)
+		warning("path[%d]=NA", i+1);
+	    continue;
+	}
+	path = translateChar(elp);
 	char *res = realpath(path, abspath);
 	if (res)
 	    SET_STRING_ELT(ans, i, mkChar(abspath));
 	else {
-	    SET_STRING_ELT(ans, i, STRING_ELT(paths, i));
+	    SET_STRING_ELT(ans, i, elp);
 	    /* and report the problem */
 	    if (mustWork == 1)
 		error("path[%d]=\"%s\": %s", i+1, path, strerror(errno));
@@ -983,7 +993,16 @@ SEXP attribute_hidden do_normalizepath(SEXP call, SEXP op, SEXP args, SEXP rho)
     warning("this platform does not have realpath so the results may not be canonical");
     PROTECT(ans = allocVector(STRSXP, n));
     for (i = 0; i < n; i++) {
-	path = translateChar(STRING_ELT(paths, i));
+	elp = STRING_ELT(paths, i);
+	if (elp == NA_STRING) {
+	    SET_STRING_ELT(ans, i, NA_STRING);
+	    if (mustWork == 1)
+		error("path[%d]=NA", i+1);
+	    else if (mustWork == NA_LOGICAL)
+		warning("path[%d]=NA", i+1);
+	    continue;
+	}
+	path = translateChar(elp);
 	OK = strlen(path) <= PATH_MAX;
 	if (OK) {
 	    if (path[0] == '/') strncpy(abspath, path, PATH_MAX);
@@ -997,7 +1016,7 @@ SEXP attribute_hidden do_normalizepath(SEXP call, SEXP op, SEXP args, SEXP rho)
 	if (OK) OK = (access(abspath, 0 /* F_OK */) == 0);
 	if (OK) SET_STRING_ELT(ans, i, mkChar(abspath));
 	else {
-	    SET_STRING_ELT(ans, i, STRING_ELT(paths, i));
+	    SET_STRING_ELT(ans, i, elp);
 	    /* and report the problem */
 	    if (mustWork == 1)
 		error("path[%d]=\"%s\": %s", i+1, path, strerror(errno));
@@ -1038,6 +1057,13 @@ const char *getTZinfo(void)
 
 #endif // not Win32
 
+
+#ifdef Win32
+static void encode_cleanup(void *data)
+{
+    WinUTF8out = TRUE;
+}
+#endif
 
 /* encodeString(x, w, quote, justify) */
 SEXP attribute_hidden do_encodeString(SEXP call, SEXP op, SEXP args, SEXP rho)
@@ -1083,6 +1109,20 @@ SEXP attribute_hidden do_encodeString(SEXP call, SEXP op, SEXP args, SEXP rho)
 	if(quote) w +=2; /* for surrounding quotes */
     }
     PROTECT(ans = duplicate(x));
+#ifdef Win32
+    RCNTXT cntxt;
+    Rboolean havecontext = FALSE;
+    /* do_encodeString is not printing, but returning a string, it therefore
+       must not produce Rgui escapes (do_encodeString may get called as part
+       of print dispatch with WinUTF8out being already set to TRUE). */
+    if (WinUTF8out) {
+	begincontext(&cntxt, CTXT_CCODE, R_NilValue, R_BaseEnv, R_BaseEnv,
+	             R_NilValue, R_NilValue);
+	cntxt.cend = &encode_cleanup;
+	havecontext = TRUE;
+	WinUTF8out = FALSE;
+    }
+#endif
     for(i = 0; i < len; i++) {
 	s = STRING_ELT(x, i);
 	if(na || s != NA_STRING) {
@@ -1097,6 +1137,12 @@ SEXP attribute_hidden do_encodeString(SEXP call, SEXP op, SEXP args, SEXP rho)
 	    }
 	}
     }
+#ifdef Win32
+    if (havecontext) {
+	encode_cleanup(NULL);
+	endcontext(&cntxt);
+    }
+#endif
     UNPROTECT(1);
     return ans;
 }
@@ -1399,6 +1445,33 @@ size_t Mbrtowc(wchar_t *wc, const char *s, size_t n, mbstate_t *ps)
     return used;
 }
 
+/* Truncate a string in place (in native encoding) so that it only contains
+   valid multi-byte characters. Has no effect in non-mbcs locales. */
+attribute_hidden
+char* mbcsTruncateToValid(char *s)
+{
+    if (!mbcslocale)
+	return s;
+
+    mbstate_t mb_st;
+    size_t slen = strlen(s);
+    size_t goodlen = 0;
+
+    mbs_init(&mb_st);
+    while(goodlen < slen) {
+	size_t res;
+	res = mbrtowc(NULL, s + goodlen, slen - goodlen, &mb_st);
+	if (res == (size_t) -1 || res == (size_t) -2) {
+	    /* strip off all remaining characters */
+	    for(;goodlen < slen; goodlen++)
+		s[goodlen] = '\0';
+	    return s;
+	}
+	goodlen += res;
+    }
+    return s;
+} 
+    
 attribute_hidden
 Rboolean mbcsValid(const char *str)
 {
@@ -1492,8 +1565,8 @@ void R_fixslash(char *s)
 	}
     } else
 	for (; *p; p++) if (*p == '\\') *p = '/';
-	/* preserve network shares */
-	if(s[0] == '/' && s[1] == '/') s[0] = s[1] = '\\';
+    /* preserve network shares */
+    if(s[0] == '/' && s[1] == '/') s[0] = s[1] = '\\';
 }
 
 void R_UTF8fixslash(char *s)
@@ -1947,11 +2020,11 @@ static UCollator *collator = NULL;
 static int collationLocaleSet = 0;
 
 /* called from platform.c */
-void attribute_hidden resetICUcollator(void)
+void attribute_hidden resetICUcollator(Rboolean disable)
 {
     if (collator) ucol_close(collator);
     collator = NULL;
-    collationLocaleSet = 0;
+    collationLocaleSet = disable ? 1 : 0;
 }
 
 static const struct {
@@ -2101,11 +2174,27 @@ int Scollate(SEXP a, SEXP b)
     if (!collationLocaleSet) {
 	int errsv = errno;      /* OSX may set errno in the operations below. */
 	collationLocaleSet = 1;
+
+	/* A lot of code depends on that setting LC_ALL or LC_COLLATE to "C"
+	   via environment variables or Sys.setlocale ensures the "C" collation
+	   order. Originally, R_ICU_LOCALE always took precedence over LC_ALL
+	   and LC_COLLATE variables and over Sys.setlocale (except on Unix when
+	   R_ICU_LOCALE=C). This now adds an exception: when LC_ALL is set to "C"
+	   (or unset and LC_COLLATE is set to "C"), the "C" collation order will
+	   be used. */
+	const char *envl = getenv("LC_ALL");
+	if (!envl || !envl[0])
+	    envl = getenv("LC_COLLATE");
+	int useC = envl && !strcmp(envl, "C");
+	    
 #ifndef Win32
-	if (strcmp("C", getLocale()) ) {
+	if (!useC && strcmp("C", getLocale()) ) {
 #else
+	/* On Windows, ICU is used for R_ICU_LOCALE=C, on Unix, it is not. */
+	/* FIXME: as ICU does not support C as locale, could we use the Unix
+	   behavior on all systems? */
 	const char *p = getenv("R_ICU_LOCALE");
-	if(p && p[0]) {
+	if(p && p[0] && (!useC || !strcmp(p, "C"))) {
 #endif
 	    UErrorCode status = U_ZERO_ERROR;
 	    uloc_setDefault(getLocale(), &status);
@@ -2149,7 +2238,7 @@ SEXP attribute_hidden do_ICUget(SEXP call, SEXP op, SEXP args, SEXP rho)
     return mkString("ICU not in use");
 }
 
-void attribute_hidden resetICUcollator(void) {}
+void attribute_hidden resetICUcollator(Rboolean disable) {}
 
 # ifdef Win32
 
@@ -2359,6 +2448,7 @@ SEXP attribute_hidden do_pretty(SEXP call, SEXP op, SEXP args, SEXP rho)
     if (eps == NA_INTEGER || eps < 0 || eps > 2)
 	error(_("'eps.correct' must be 0, 1, or 2"));
     R_pretty(&l, &u, &n, min_n, shrink, REAL(hi), eps, 1);
+    //------ (returns 'unit' which we do not need)
     PROTECT(ans = allocVector(VECSXP, 3));
     SET_VECTOR_ELT(ans, 0, ScalarReal(l));
     SET_VECTOR_ELT(ans, 1, ScalarReal(u));
