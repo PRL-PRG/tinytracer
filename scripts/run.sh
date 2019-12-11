@@ -249,6 +249,8 @@ export REPEAT_LIST
 echo progress log at $PROGRESS_LOG
 
 # Run function in parallel
-parallel --verbose --gnu --keep-order -j${N_PROCESSES} --link run_item ::: $composition
+#parallel --verbose --gnu --keep-order -j${N_PROCESSES} --link run_item ::: $composition
+# I'm removing keep order to see if it'll prevent problems with file handles
+parallel --verbose --gnu -j${N_PROCESSES} --link run_item ::: $composition
 
 echo done with everything
