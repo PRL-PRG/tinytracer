@@ -9,11 +9,12 @@ then
 fi
 
 <"$LOG_FILE" awk '
-BEGIN          { good=0; bad=0; ugly=0; skipped=0; repeats=0 }
+BEGIN          { good=0; bad=0; ugly=0; skipped=0; repeats=0; blacklisted=0 }
 $1 == "total"  { total=$2; next }
 $1 == "start"  { processes[$2]="?"; next }
 $1 == "skip"   { skipped++ }
 $1 == "repeat" { repeats++ }
+$1 == "blacklisted" { blacklisted++ }
 $1 == "stop"   { if ($3 in processes) {
                      if (processes[$3] != "?") { ugly++ }
                      else if($2 == "0")        { good++ }
@@ -22,17 +23,19 @@ $1 == "stop"   { if ($3 in processes) {
                  } else                        { ugly++ }
                  next                                              }
 END            { unfinished=0; for (p in processes) unfinished++
-  
-                 print "good       " good
-                 print "bad        " bad
-                 print "ugly       " ugly
-                 print "repeats    " repeats
-                 print "unfinished " unfinished
-                 print "skipped    " skipped
+                 done = good + bad + ugly + skipped + repeats + blacklisted
+
+                 print "good         " good
+                 print "bad          " bad
+                 print "ugly         " ugly
+                 print "repeats      " repeats
+                 print "unfinished   " unfinished
+                 print "skipped      " skipped
+                 print "blacklisted  " blacklisted
                  print "-------------------"
-                 print "done       " (good + bad + ugly + skipped + repeats)
-                 print "unfinished " unfinished
-                 print "to do      " (total - unfinished - good - bad - ugly - skipped - repeats) 
+                 print "done         " done
+                 print "unfinished   " unfinished
+                 print "to do        " (total - unfinished - done) 
                  print "-------------------"
-                 print "total      " total                          }'
+                 print "total        " total }'
 

@@ -14,8 +14,8 @@ TEMP=$(getopt -o Dw:p:c:L:R: --long do-not-repeat,working-dir:,processes:,compil
 eval set -- "$TEMP"
 
 # Constants (possibly overriden by arguments).
-CMD="/home/$USER/tinytracer/bin/Rscript"
-WORKING_DIR='/tmp/vignettes'
+CMD="/home/$USER/Workspace/tt-fresh/bin/Rscript"
+WORKING_DIR='/data/vignettes'
 START_TIME=`date +%y-%m-%d`
 RESULTS_DIR="$WORKING_DIR/_results/$START_TIME"
 LOGS_DIR="$WORKING_DIR/_logs/$START_TIME"
@@ -37,7 +37,7 @@ do
         --compiler)         COMPILER="$2";      shift 2        ;;
         --start-from)       START_FROM="$2";    shift 2        ;;
         --end-at)           END_AT="$2";        shift 2        ;;
-	-D|--do-not-repeat) DO_NOT_REPEAT=true; shift          ;;
+        -D|--do-not-repeat) DO_NOT_REPEAT=true; shift          ;;
         --)                                     shift;    break;;
         *)                                                break;;
     esac
@@ -74,7 +74,11 @@ function run_item {
     if repeats "$package" "$item"
     then
         echo "Item \"$item\" was run in a previous execution, skipping"
-	echo repeat "$1" >> "$PROGRESS_LOG"
+        echo repeat "$1" >> "$PROGRESS_LOG"
+    elif blacklisted "$package" "$item"
+    then
+        echo "Item \"$item\" was blacklisted, skipping"
+        echo blacklist "$1" >> "$PROGRESS_LOG"
     elif [ "$runnable" = NA ]
     then    
     	echo Nothing to run for \"$item\", a $type from package $package
@@ -140,9 +144,16 @@ function generate_repeat_list {
 # $2: vignette
 function repeats {
     echo $REPEAT_LIST | tr " " "\n" \
-	              | grep -w $1/$2 >/dev/null \
-		      && return 0 \
-		      || return -1
+                      | grep -w $1/$2 >/dev/null \
+                      && return 0 \
+                      || return -1
+}
+
+function blacklisted {
+    echo $BLACKLIST | tr " " "\n" \
+                    | grep -w $1/$2 >/dev/null \
+                    && return 0 \
+                    || return -1
 }
 
 # We expout variables and functions so that they are visible in subprocesses.
@@ -156,6 +167,7 @@ export -f run_item
 export -f join
 export -f split
 export -f repeats 
+export -f blacklisted 
 
 # Body ########################################################################
 
@@ -202,13 +214,13 @@ export R_KEEP_PKG_SOURCE=no
 
 if [ $COMPILER = 'jit' ];
 then
-    export R_LIBS=/data/kondziu/R/installed/
+    export R_LIBS=/home/$USER/Workspace/tt-fresh/local_R_LIBS/
     export R_COMPILE_PKG=1
     export R_DISABLE_BYTECODE=0
     export R_ENABLE_JIT=3
 elif [ $COMPILER = 'disable_bytecode' ]
 then
-    export R_LIBS=/data/kondziu/R/installed/
+    export R_LIBS=/home/$USER/Workspace/tt-fresh/local_R_LIBS/
     export R_COMPILE_PKG=0
     export R_DISABLE_BYTECODE=1
     export R_ENABLE_JIT=0
@@ -233,7 +245,7 @@ export PROGRESS_LOG="$LOGS_DIR/.progress_$$"
 mkdir -p `dirname "$PROGRESS_LOG"`
 echo total `echo $composition | wc -w` > "$PROGRESS_LOG"
 
-
+export BLACKLIST="doParallel/gettingstartedParallel"
 
 if $DO_NOT_REPEAT 
 then
