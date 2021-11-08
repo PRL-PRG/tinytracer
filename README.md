@@ -50,7 +50,7 @@ sudo apt-get install libssl-dev libssh2-1-dev gdal-bin libgdal-dev
 sudo apt-get install libboost-all-dev
 ```
 
-# Downloading CRNA packages
+# Downloading CRAN packages
 
 The directory where we want to download CRAN is $CRAN_DIR. This is not the directory where it is going to be installed, just where our local repository will be located.
 
